@@ -235,11 +235,6 @@ ${data.whenToSeekCare?.map(w => `- ${w}`).join('\n')}
           </button>
 
           <span className="text-[11px] text-sapphire-600 font-mono ml-2 flex items-center gap-1.5 font-semibold">
-            {message.modelUsed && (
-              <span className="px-1.5 py-0.5 rounded bg-sapphire-100 border border-sapphire-300 text-[10px] text-sapphire-900 font-bold">
-                {message.modelUsed.split('/').pop()}
-              </span>
-            )}
             <span>{message.timestamp}</span>
           </span>
         </div>

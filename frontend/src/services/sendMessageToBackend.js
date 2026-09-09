@@ -23,18 +23,18 @@
  */
 
 export const DEFAULT_FREE_MODELS = [
-  { id: "openrouter/free", name: "Auto Free Router (Recommended)", isFree: true },
-  { id: "minimax/minimax-m3:free", name: "MiniMax M3 (Free)", isFree: true },
-  { id: "nvidia/nemotron-3.5-lightning:free", name: "Nemotron 3.5 Lightning (Free)", isFree: true },
-  { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super 120B (Free)", isFree: true },
-  { id: "liquid/lfm-2.5-2.6b:free", name: "LFM 2.5 2.6B (Free)", isFree: true },
-  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", isFree: true },
-  { id: "google/gemma-4-26b-a4b-it:free", name: "Gemma 4 26B A4B IT (Free)", isFree: true },
-  { id: "z-ai/glm-5.2:free", name: "GLM 5.2 (Free)", isFree: true },
-  { id: "minimax/minimax-m2.7:free", name: "MiniMax M2.7 (Free)", isFree: true },
-  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nemotron 3 Nano Omni (Free)", isFree: true },
-  { id: "inclusionai/ling-3.0-flash-fin:free", name: "Ling 3.0 Flash Fin (Free)", isFree: true },
-  { id: "dots-studio/dots-3-note-preview:free", name: "Dots 3 Note Preview (Free)", isFree: true }
+  { id: "openrouter/free", name: "Auto Router (Recommended)", isFree: true },
+  { id: "minimax/minimax-m3:free", name: "MiniMax M3", isFree: true },
+  { id: "nvidia/nemotron-3.5-lightning:free", name: "Nemotron 3.5 Lightning", isFree: true },
+  { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super 120B", isFree: true },
+  { id: "liquid/lfm-2.5-2.6b:free", name: "LFM 2.5 2.6B", isFree: true },
+  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT", isFree: true },
+  { id: "google/gemma-4-26b-a4b-it:free", name: "Gemma 4 26B A4B IT", isFree: true },
+  { id: "z-ai/glm-5.2:free", name: "GLM 5.2", isFree: true },
+  { id: "minimax/minimax-m2.7:free", name: "MiniMax M2.7", isFree: true },
+  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nemotron 3 Nano Omni", isFree: true },
+  { id: "inclusionai/ling-3.0-flash-fin:free", name: "Ling 3.0 Flash Fin", isFree: true },
+  { id: "dots-studio/dots-3-note-preview:free", name: "Dots 3 Note Preview", isFree: true }
 ];
 
 export async function fetchAvailableModels() {

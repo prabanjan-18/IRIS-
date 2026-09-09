@@ -33,7 +33,7 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const currentModelObj = models.find((m) => m.id === selectedModel) || models[0] || { name: 'Auto Free Router', id: 'openrouter/free' };
+  const currentModelObj = models.find((m) => m.id === selectedModel) || models[0] || { name: 'Auto Router', id: 'openrouter/free' };
 
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
@@ -48,10 +48,7 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
         </div>
         
         <div className="flex items-center gap-1 max-w-[110px] sm:max-w-[150px] truncate">
-          <span className="truncate text-sapphire-900 text-[11px] font-bold">{currentModelObj.name.replace(" (Free)", "")}</span>
-          <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 font-mono font-bold border border-emerald-300 uppercase shrink-0">
-            Free
-          </span>
+          <span className="truncate text-sapphire-900 text-[11px] font-bold">{currentModelObj.name}</span>
         </div>
 
         <ChevronDown className={`w-3 h-3 text-sapphire-600 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-sapphire-900' : ''}`} />
@@ -64,14 +61,14 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
               <Sparkles className="w-3.5 h-3.5 text-sapphire-600" />
               <span>Select LLM Model</span>
             </div>
-            <span className="text-[10px] text-sapphire-700 font-mono font-medium">OpenRouter Free Tier</span>
+            <span className="text-[10px] text-sapphire-700 font-mono font-medium">OpenRouter Models</span>
           </div>
 
           <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
             {models.map((model) => {
               const isSelected = model.id === selectedModel;
               const provider = model.id.split('/')[0] || 'OpenRouter';
-              const cleanName = model.name.replace(" (Free)", "");
+              const cleanName = model.name;
 
               return (
                 <button
@@ -98,9 +95,6 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono font-bold">
-                      FREE
-                    </span>
                     {isSelected && <Check className="w-3.5 h-3.5 text-sapphire-800 stroke-[2.5]" />}
                   </div>
                 </button>

@@ -44,7 +44,7 @@ async def health_check():
 
 def _format_model_name(model_id: str) -> str:
     raw_name = model_id.split("/")[-1].replace(":free", "").replace("-", " ").title()
-    return f"{raw_name} (Free)"
+    return raw_name
 
 @app.get("/api/models")
 async def get_available_models():
