@@ -19,6 +19,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,4 +92,6 @@ async def clear_session_memory(session_id: str = Path(..., description="Session 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=settings.HOST, port=settings.PORT, reload=True)
+    server_port = int(os.environ.get("PORT", settings.PORT))
+    server_host = os.environ.get("HOST", settings.HOST)
+    uvicorn.run("main:app", host=server_host, port=server_port, reload=False)

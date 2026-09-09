@@ -21,10 +21,12 @@ class Settings(BaseSettings):
     MODEL_LING_3_0: str = "inclusionai/ling-3.0-flash-fin:free"
     MODEL_DOTS_3: str = "dots-studio/dots-3-note-preview:free"
 
-    HOST: str = "127.0.0.1"
+    HOST: str = "0.0.0.0"
     PORT: int = 8000
+    FRONTEND_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
     
+    ENABLE_HEAVY_EMBEDDINGS: bool = False
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     VECTOR_DB_DIR: str = "./chroma_db"
     MAX_RAG_CONTEXT_TURNS: int = 4
@@ -67,9 +69,10 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        if not self.CORS_ORIGINS:
-            return ["*"]
-        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()] if self.CORS_ORIGINS else ["*"]
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip() not in origins and origins != ["*"]:
+            origins.append(self.FRONTEND_URL.strip())
+        return origins
 
 def get_settings() -> Settings:
     return Settings()

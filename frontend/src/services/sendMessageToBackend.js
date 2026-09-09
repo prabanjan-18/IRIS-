@@ -37,8 +37,10 @@ export const DEFAULT_FREE_MODELS = [
   { id: "dots-studio/dots-3-note-preview:free", name: "Dots 3 Note Preview", isFree: true }
 ];
 
+export const API_BASE_URL = (import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+
 export async function fetchAvailableModels() {
-  const BACKEND_MODELS_URL = "http://127.0.0.1:8000/api/models";
+  const BACKEND_MODELS_URL = `${API_BASE_URL}/api/models`;
   try {
     const response = await fetch(BACKEND_MODELS_URL);
     if (response.ok) {
@@ -54,7 +56,7 @@ export async function fetchAvailableModels() {
 }
 
 export async function sendMessageToBackend(userMessageText, conversationHistory = [], isClinicalMode = false, selectedModel = null, sessionId = "iris-default-session") {
-  const BACKEND_URL = "http://127.0.0.1:8000/api/chat";
+  const BACKEND_URL = `${API_BASE_URL}/api/chat`;
 
   try {
     const formattedHistory = Array.isArray(conversationHistory) 
@@ -87,7 +89,7 @@ export async function sendMessageToBackend(userMessageText, conversationHistory 
     console.warn("[Backend API] Unable to connect to FastAPI backend server.", err);
   }
 
-  // If backend is unreachable, show a clear error — never fake medical data
+  // If backend is unreachable, show a clear error with active endpoint info
   return {
     id: `msg-${Date.now()}`,
     sender: "assistant",
@@ -95,23 +97,23 @@ export async function sendMessageToBackend(userMessageText, conversationHistory 
     structuredData: {
       triageLevel: "self",
       triageLabel: "Backend Server Unreachable",
-      summary: `Could not connect to the IRIS backend server at http://127.0.0.1:8000. Please ensure the FastAPI backend is running (cd backend && python main.py) and try again.`,
+      summary: `Could not connect to the IRIS backend server at ${API_BASE_URL}. If your backend is hosted on Render's free tier, it may take 30-50 seconds to wake up from idle. Please verify that VITE_BACKEND_URL is properly configured in Vercel.`,
       causes: [
-        "Backend server is not running on port 8000",
-        "Network connectivity issue between frontend and backend",
-        "Backend server may have crashed or is restarting"
+        `Backend service at ${API_BASE_URL} is currently unreachable`,
+        "Render free tier instance is spinning up from sleep (cold start)",
+        "VITE_BACKEND_URL may not match the deployed Render service URL"
       ],
       selfCare: [
-        "Open a terminal in c:\\IRIS\\backend and run: python main.py",
-        "Verify the server is listening at http://127.0.0.1:8000/api/health",
-        "Then retry your message"
+        "Wait 30 seconds for the Render backend to wake up and try again",
+        `Verify the backend health status directly at ${API_BASE_URL}/api/health`,
+        "If testing locally, ensure backend is running via: cd backend && python main.py"
       ],
       whenToSeekCare: [],
       sources: [
         {
-          title: "IRIS Backend Server",
-          url: "http://127.0.0.1:8000/api/health",
-          snippet: "Check if the FastAPI backend is running and healthy."
+          title: "IRIS Backend Health Endpoint",
+          url: `${API_BASE_URL}/api/health`,
+          snippet: "Check backend health, model configurations, and memory status."
         }
       ]
     },

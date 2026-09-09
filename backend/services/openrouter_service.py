@@ -334,9 +334,10 @@ class OpenRouterService:
         model_used: str = "fallback-rules-engine"
 
         if has_valid_key:
+            referer = current_settings.FRONTEND_URL if current_settings.FRONTEND_URL else "https://openrouter.ai"
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "http://localhost:5173",
+                "HTTP-Referer": referer,
                 "X-Title": "IRIS Health Assistant",
                 "Content-Type": "application/json"
             }
