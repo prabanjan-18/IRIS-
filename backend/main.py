@@ -2,13 +2,14 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, HTTPException, Path
+from fastapi import FastAPI, HTTPException, Path, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from models.schemas import ChatRequest, ChatResponse, HealthStatus, ModelInfo, NearbyHospitalsResponse
+from models.schemas import ChatRequest, ChatResponse, HealthStatus, ModelInfo, NearbyHospitalsResponse, ParseDocumentResponse
 from services.openrouter_service import openrouter_service
 from services.rag_service import rag_service
 from services.location_service import location_service
+from services.document_service import document_service
 
 app = FastAPI(
     title="IRIS Health & Clinical AI API",
@@ -59,10 +60,43 @@ async def get_available_models():
             models_list.append(ModelInfo(id=model_id, name=_format_model_name(model_id), isFree=True))
     return models_list
 
+@app.post("/api/documents/parse", response_model=ParseDocumentResponse)
+async def parse_document_endpoint(file: UploadFile = File(...)):
+    """Accepts PDF, DOCX, DOC, or TXT medical lab reports, extracts readable text, and classifies report type."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename missing")
+    
+    try:
+        content_bytes = await file.read()
+        if not content_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        
+        result = document_service.extract_text(content_bytes, file.filename)
+        return ParseDocumentResponse(
+            status="success",
+            filename=result["filename"],
+            fileType=result["fileType"],
+            extractedText=result["extractedText"],
+            pageCount=result["pageCount"],
+            wordCount=result["wordCount"],
+            charCount=result["charCount"],
+            preview=result["preview"],
+            detectedReportType=result["detectedReportType"]
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
+    except Exception as e:
+        print(f"[Document API Error] Failed to parse document: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract text from document: {str(e)}")
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    if not request.userMessageText or not request.userMessageText.strip():
-        raise HTTPException(status_code=400, detail="userMessageText cannot be empty")
+    user_text = (request.userMessageText or "").strip()
+    if not user_text and not request.document:
+        raise HTTPException(status_code=400, detail="Either userMessageText or document must be provided")
+    
+    if not user_text and request.document:
+        user_text = f"Please review and analyze this attached medical report ({request.document.filename}). Summarize key findings, test parameters, and explain any abnormal values."
         
     try:
         history_list = []
@@ -70,12 +104,13 @@ async def chat_endpoint(request: ChatRequest):
             history_list = [{"role": msg.role, "content": msg.content} for msg in request.conversationHistory]
             
         response = await openrouter_service.generate_response(
-            user_message_text=request.userMessageText,
+            user_message_text=user_text,
             conversation_history=history_list,
             is_clinical_mode=request.isClinicalMode or False,
             session_id=request.sessionId or "default-session",
             requested_model=request.model,
-            user_location=request.userLocation
+            user_location=request.userLocation,
+            document=request.document
         )
         return response
     except Exception as e:

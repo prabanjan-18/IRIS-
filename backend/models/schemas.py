@@ -5,6 +5,25 @@ class ChatMessageInput(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
 
+class DocumentAttachment(BaseModel):
+    filename: str
+    fileType: Optional[str] = "Lab Document"
+    extractedText: str
+    detectedReportType: Optional[str] = None
+    pageCount: Optional[int] = 1
+    wordCount: Optional[int] = None
+
+class ParseDocumentResponse(BaseModel):
+    status: str = "success"
+    filename: str
+    fileType: str
+    extractedText: str
+    pageCount: int
+    wordCount: int
+    charCount: int
+    preview: str
+    detectedReportType: str
+
 class ChatRequest(BaseModel):
     userMessageText: str
     conversationHistory: Optional[List[ChatMessageInput]] = []
@@ -12,6 +31,7 @@ class ChatRequest(BaseModel):
     sessionId: Optional[str] = "default-session"
     model: Optional[str] = None
     userLocation: Optional[Dict[str, float]] = None
+    document: Optional[DocumentAttachment] = None
 
 class SourceItem(BaseModel):
     title: str
@@ -59,10 +79,11 @@ class ChatResponse(BaseModel):
     text: Optional[str] = None
     reply: Optional[str] = None
     structuredData: Optional[StructuredData] = None
-    responseType: Literal["medical", "conversation", "location_request", "hospital_results"] = "medical"
+    responseType: Literal["medical", "conversation", "location_request", "hospital_results", "document_analysis"] = "medical"
     ragContextUsed: Optional[List[str]] = None
     modelUsed: Optional[str] = None
     hospitals: Optional[List[HospitalResult]] = None
+    document: Optional[DocumentAttachment] = None
 
 class HealthStatus(BaseModel):
     status: str

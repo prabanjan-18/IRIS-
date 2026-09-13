@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, ArrowUp, Mic, Brain, Paperclip, X, FileText, Image, Camera, Check } from 'lucide-react';
+import { Plus, ArrowUp, Mic, Brain, Paperclip, X, FileText, Image, Camera, Check, Loader2, AlertCircle } from 'lucide-react';
 import ModelSelector from './ModelSelector';
+import { parseDocumentFile } from '../../services/sendMessageToBackend';
 
 export default function MessageComposer({ onSendMessage, isThinkingMode, setIsThinkingMode, inputText, setInputText, selectedModel, setSelectedModel }) {
   const [attachment, setAttachment] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const [isParsingDoc, setIsParsingDoc] = useState(false);
+  const [docError, setDocError] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const textareaRef = useRef(null);
   const docInputRef = useRef(null);
@@ -35,6 +39,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     if (!inputText.trim() && !attachment) return;
+    if (isParsingDoc) return; // Wait for document scanning to finish
 
     onSendMessage(inputText.trim(), attachment);
     setInputText('');
@@ -52,16 +57,59 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
     }
   };
 
-  const handleDocChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const processDocumentFile = async (file) => {
+    if (!file) return;
+    setIsParsingDoc(true);
+    setDocError(null);
+    setIsAttachMenuOpen(false);
+
+    try {
+      const parsed = await parseDocumentFile(file);
       setAttachment({
         name: file.name,
         size: (file.size / 1024).toFixed(1) + ' KB',
-        type: 'Lab Document',
-        icon: FileText
+        type: parsed.detectedReportType || 'Lab Document',
+        icon: FileText,
+        extractedText: parsed.extractedText,
+        detectedReportType: parsed.detectedReportType,
+        pageCount: parsed.pageCount,
+        wordCount: parsed.wordCount,
+        charCount: parsed.charCount,
+        preview: parsed.preview
       });
-      setIsAttachMenuOpen(false);
+    } catch (err) {
+      console.error("Document parsing error:", err);
+      setDocError(err.message || "Could not read text from document. Please ensure it is a digital PDF or Word doc.");
+      setTimeout(() => setDocError(null), 5000);
+    } finally {
+      setIsParsingDoc(false);
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  };
+
+  const handleDocChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processDocumentFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processDocumentFile(file);
     }
   };
 
@@ -75,6 +123,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
         icon: Image
       });
       setIsAttachMenuOpen(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
     }
   };
 
@@ -88,6 +137,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
         icon: Camera
       });
       setIsAttachMenuOpen(false);
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -103,16 +153,34 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
   return (
     <div className="w-full max-w-4xl mx-auto px-4 font-sans">
       
+      {/* Scanning status indicator */}
+      {isParsingDoc && (
+        <div className="mb-2 inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-sky-50 dark:bg-[#0c1e33] border border-sky-200 dark:border-[#1e3854] text-xs text-sky-800 dark:text-[#38bdf8] shadow-soft animate-fadeIn">
+          <Loader2 className="w-4 h-4 animate-spin text-sky-600 dark:text-[#38bdf8]" />
+          <span className="font-semibold">Scanning medical document & extracting lab text...</span>
+        </div>
+      )}
+
+      {/* Parsing error notification */}
+      {docError && (
+        <div className="mb-2 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-700 dark:text-red-300 shadow-soft animate-fadeIn">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <span>{docError}</span>
+        </div>
+      )}
+
       {/* File Attachment Pill */}
-      {attachment && (
-        <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] text-xs text-sapphire-900 dark:text-[#EAF6F7] shadow-soft animate-fadeIn">
+      {attachment && !isParsingDoc && (
+        <div className="mb-2 inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] text-xs text-sapphire-900 dark:text-[#EAF6F7] shadow-soft animate-fadeIn">
           <AttachmentIcon className="w-4 h-4 text-sapphire-600 dark:text-[#38bdf8] shrink-0" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-sapphire-100 dark:bg-[#16273c] text-sapphire-900 dark:text-[#38bdf8] font-mono font-bold uppercase">
-              {attachment.type}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-sapphire-100 dark:bg-[#16273c] text-sapphire-900 dark:text-[#38bdf8] font-mono font-bold uppercase">
+              {attachment.detectedReportType || attachment.type}
             </span>
             <span className="font-semibold truncate max-w-xs">{attachment.name}</span>
-            <span className="text-[10px] text-sapphire-500 dark:text-[#82A8D2] font-mono">({attachment.size})</span>
+            <span className="text-[10px] text-sapphire-500 dark:text-[#82A8D2] font-mono">
+              ({attachment.size}{attachment.pageCount ? ` • ${attachment.pageCount} pg` : ''})
+            </span>
           </div>
           <button 
             onClick={() => setAttachment(null)}
@@ -127,7 +195,14 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
       {/* Main Form Composer Container */}
       <form
         onSubmit={handleSubmit}
-        className="relative bg-white/95 dark:bg-[#0d1b2a]/95 border border-frosted-300/80 dark:border-[#1e3854] rounded-3xl shadow-card-glow focus-within:border-sapphire-500 dark:focus-within:border-[#38bdf8] transition-all p-2 flex flex-col gap-2 backdrop-blur-md"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`relative bg-white/95 dark:bg-[#0d1b2a]/95 border ${
+          isDragOver 
+            ? 'border-[#38bdf8] ring-2 ring-[#38bdf8]/30 bg-sky-50/50 dark:bg-[#0e2137]' 
+            : 'border-frosted-300/80 dark:border-[#1e3854]'
+        } rounded-3xl shadow-card-glow focus-within:border-sapphire-500 dark:focus-within:border-[#38bdf8] transition-all p-2 flex flex-col gap-2 backdrop-blur-md`}
       >
         {/* Hidden File Inputs */}
         <input
@@ -135,7 +210,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
           ref={docInputRef}
           onChange={handleDocChange}
           className="hidden"
-          accept=".pdf,.doc,.docx,.txt"
+          accept=".pdf,.doc,.docx,.txt,.csv"
         />
         <input
           type="file"

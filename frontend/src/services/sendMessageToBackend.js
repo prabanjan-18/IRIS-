@@ -55,13 +55,32 @@ export async function fetchAvailableModels() {
   return DEFAULT_FREE_MODELS;
 }
 
+export async function parseDocumentFile(file) {
+  const PARSE_URL = `${API_BASE_URL}/api/documents/parse`;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(PARSE_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => ({ detail: 'Failed to parse document' }));
+    throw new Error(errJson.detail || `Server returned ${response.status}`);
+  }
+
+  return await response.json();
+}
+
 export async function sendMessageToBackend(
   userMessageText,
   conversationHistory = [],
   isClinicalMode = false,
   selectedModel = null,
   sessionId = "iris-default-session",
-  userLocation = null
+  userLocation = null,
+  document = null
 ) {
   const BACKEND_URL = `${API_BASE_URL}/api/chat`;
 
@@ -84,7 +103,8 @@ export async function sendMessageToBackend(
         isClinicalMode: isClinicalMode,
         sessionId: sessionId || "iris-default-session",
         model: selectedModel || undefined,
-        userLocation: userLocation || undefined
+        userLocation: userLocation || undefined,
+        document: document || undefined
       })
     });
 

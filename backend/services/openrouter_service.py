@@ -3,8 +3,14 @@ import time
 import httpx
 from typing import Dict, Any, List, Optional
 from config import get_settings, settings
-from models.schemas import ChatResponse, HospitalResult
-from utils.prompts import build_system_prompt, build_conversational_prompt, build_classifier_prompt, build_hospital_intro_prompt
+from models.schemas import ChatResponse, HospitalResult, DocumentAttachment
+from utils.prompts import (
+    build_system_prompt,
+    build_conversational_prompt,
+    build_classifier_prompt,
+    build_hospital_intro_prompt,
+    build_document_analysis_prompt
+)
 from services.rag_service import rag_service
 from services.location_service import location_service
 
@@ -260,7 +266,8 @@ class OpenRouterService:
         is_clinical_mode: bool = False,
         session_id: str = "default-session",
         requested_model: Optional[str] = None,
-        user_location: Optional[Dict[str, float]] = None
+        user_location: Optional[Dict[str, float]] = None,
+        document: Optional[DocumentAttachment] = None
     ) -> ChatResponse:
         
         current_settings = get_settings()
@@ -278,6 +285,84 @@ class OpenRouterService:
         for fallback in current_settings.fallback_models_list:
             if fallback not in candidate_models:
                 candidate_models.append(fallback)
+
+        # ──────────────────────────────────────────────
+        # STEP 0: DOCUMENT / LAB REPORT ANALYSIS MODE
+        # ──────────────────────────────────────────────
+        if document and document.extractedText and document.extractedText.strip():
+            print(f"[OpenRouter Service] Processing document analysis for: '{document.filename}' ({document.detectedReportType})")
+            rag_chunks = rag_service.retrieve_relevant_memory(
+                session_id,
+                f"{document.detectedReportType or 'Lab Report'} {user_message_text}",
+                top_k=settings.MAX_RAG_CONTEXT_TURNS
+            )
+            rag_service.add_to_memory(
+                session_id,
+                "user",
+                f"[Uploaded {document.filename} ({document.detectedReportType or 'Report'})]: {user_message_text}"
+            )
+
+            system_prompt = build_document_analysis_prompt(
+                filename=document.filename,
+                detected_type=document.detectedReportType or document.fileType or "Medical Report",
+                document_text=document.extractedText,
+                rag_chunks=rag_chunks,
+                is_clinical_mode=is_clinical_mode
+            )
+
+            messages = [{"role": "system", "content": system_prompt}]
+            if conversation_history:
+                for turn in conversation_history[-4:]:
+                    role = turn.get("role", "user")
+                    content = turn.get("content", "")
+                    if content and role in ["user", "assistant"]:
+                        messages.append({"role": role, "content": content})
+
+            user_query = user_message_text.strip() if user_message_text and user_message_text.strip() else "Please thoroughly review and interpret my attached lab report / document."
+            messages.append({"role": "user", "content": user_query})
+
+            if has_valid_key:
+                raw_content, model_used = await self._call_llm(
+                    messages, api_key, api_url, candidate_models, referer, temperature=0.2
+                )
+                if raw_content:
+                    reply_text = raw_content.strip()
+                    rag_service.add_to_memory(session_id, "assistant", reply_text[:600])
+                    return ChatResponse(
+                        id=f"msg-{int(time.time()*1000)}",
+                        sender="assistant",
+                        timestamp=time.strftime("%I:%M %p"),
+                        text=reply_text,
+                        reply=reply_text,
+                        responseType="document_analysis",
+                        ragContextUsed=rag_chunks,
+                        modelUsed=model_used,
+                        document=document
+                    )
+
+            # Fallback if API key missing or LLM call fails
+            fallback_text = (
+                f"### Document Analysis: {document.filename}\n\n"
+                f"**Report Type Detected:** {document.detectedReportType or 'Medical Document'}\n"
+                f"**Extracted Content:** {document.wordCount or len(document.extractedText.split())} words, {document.pageCount or 1} page(s)\n\n"
+                "To get live clinical AI interpretation, biomarker tables, and parameter analysis of your lab report, "
+                "please ensure your OpenRouter API key is configured in `backend/.env`.\n\n"
+                "**Preview of extracted content:**\n"
+                f"> {document.extractedText[:300].strip()}...\n\n"
+                "⚠️ *Always review laboratory findings and clinical reports directly with your healthcare provider.*"
+            )
+            rag_service.add_to_memory(session_id, "assistant", fallback_text[:500])
+            return ChatResponse(
+                id=f"msg-{int(time.time()*1000)}",
+                sender="assistant",
+                timestamp=time.strftime("%I:%M %p"),
+                text=fallback_text,
+                reply=fallback_text,
+                responseType="document_analysis",
+                ragContextUsed=rag_chunks,
+                modelUsed="fallback-document-parser",
+                document=document
+            )
 
         # ──────────────────────────────────────────────
         # STEP 1: CLASSIFY INTENT

@@ -113,13 +113,15 @@ export default function UserProfile({ isCollapsed = false }) {
 
             {/* Tactile Pill Toggle Switch */}
             <div
+              role="switch"
+              aria-checked={isDark}
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-300 ease-in-out ${
                 isDark ? 'bg-[#2563EB]' : 'bg-slate-300'
               }`}
             >
               <span
                 className={`pointer-events-none flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white shadow-md transform transition duration-300 ease-in-out ${
-                  isDark ? 'translate-x-4.5' : 'translate-x-0.5'
+                  isDark ? 'translate-x-5' : 'translate-x-0.5'
                 }`}
               >
                 {isDark ? (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { FileText } from 'lucide-react';
 import TopBar from '../components/chat/TopBar';
 import EmptyState from '../components/chat/EmptyState';
 import AdaptiveMessageRenderer from '../components/chat/AdaptiveMessageRenderer';
@@ -58,7 +59,15 @@ export default function ChatPage({
     const userMsg = {
       id: `msg-${Date.now()}`,
       sender: "user",
-      text: text,
+      text: text || (attachment ? `Please analyze my attached report: ${attachment.name}` : ""),
+      attachment: attachment ? {
+        name: attachment.name,
+        size: attachment.size,
+        type: attachment.type,
+        detectedReportType: attachment.detectedReportType,
+        pageCount: attachment.pageCount,
+        wordCount: attachment.wordCount
+      } : null,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -69,15 +78,24 @@ export default function ChatPage({
     setIsThinking(true);
 
     try {
-      // Call service backend API with selectedModel, session ID, and cached location
       const currentSessionId = activeChat?.id || "iris-default-session";
+      const docPayload = attachment && attachment.extractedText ? {
+        filename: attachment.name,
+        fileType: attachment.type,
+        extractedText: attachment.extractedText,
+        detectedReportType: attachment.detectedReportType,
+        pageCount: attachment.pageCount,
+        wordCount: attachment.wordCount
+      } : null;
+
       const assistantMsg = await sendMessageToBackend(
-        text,
+        text || (attachment ? `Please review and analyze this attached medical document / lab report: ${attachment.name}` : ""),
         updatedMessages,
         isClinicalMode,
         selectedModel,
         currentSessionId,
-        cachedLocation
+        cachedLocation,
+        docPayload
       );
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (error) {
@@ -153,6 +171,25 @@ export default function ChatPage({
                 return (
                   <div key={msg.id} className="flex justify-end my-4 animate-fadeIn">
                     <div className="max-w-xl bg-white/95 dark:bg-[#14263b]/95 text-sapphire-950 dark:text-[#F1F7FB] border border-frosted-300 dark:border-[#223d5d] rounded-2xl rounded-tr-xs px-4 py-3 text-sm md:text-base leading-relaxed shadow-soft font-sans backdrop-blur-sm">
+                      {msg.attachment && (
+                        <div className="mb-2.5 p-2.5 rounded-xl bg-frosted-100/70 dark:bg-[#0c1622]/90 border border-frosted-300 dark:border-[#1e3854] flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-sapphire-800 dark:bg-[#254E7A] text-white flex items-center justify-center shrink-0 shadow-soft">
+                            <FileText className="w-4 h-4 text-sky-400" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB] truncate">
+                              {msg.attachment.name}
+                            </div>
+                            <div className="text-[10px] text-sapphire-600 dark:text-[#82A8D2] font-mono flex items-center gap-1.5 mt-0.5">
+                              <span className="font-semibold px-1.5 py-0.2 rounded bg-sapphire-100 dark:bg-[#16273c] text-sapphire-800 dark:text-[#38bdf8]">
+                                {msg.attachment.detectedReportType || msg.attachment.type || "Lab Document"}
+                              </span>
+                              {msg.attachment.pageCount && <span>• {msg.attachment.pageCount} pg</span>}
+                              {msg.attachment.size && <span>• {msg.attachment.size}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       <p className="whitespace-pre-wrap font-medium">{msg.text}</p>
                       <div className="text-[10px] text-sapphire-500 dark:text-slate-300 text-right mt-1.5 font-mono font-medium">
                         {msg.timestamp}
