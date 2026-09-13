@@ -4,16 +4,39 @@
 
 @layer base {
   body {
-    background: linear-gradient(135deg, #E0FAFF 0%, #D4C4EE 50%, #B8A3E0 100%);
+    background: linear-gradient(135deg, #E0FAFF 0%, #a4d1e7 50%, #a3cfe0 100%);
     background-attachment: fixed;
-    color: #0B192C; /* Sapphire Blue Primary Text */
+    color: #0B192C;
+    /* Sapphire Blue Primary Text */
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  html.dark body {
+    background: linear-gradient(135deg, #070e17 0%, #0c1827 50%, #15132d 100%);
+    background-attachment: fixed;
+    color: #F1F7FB;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: 'Lora', Georgia, serif;
-    color: #0B192C; /* Sapphire Blue Headings */
+    color: #0B192C;
+    /* Sapphire Blue Headings */
+  }
+
+  html.dark h1,
+  html.dark h2,
+  html.dark h3,
+  html.dark h4,
+  html.dark h5,
+  html.dark h6 {
+    color: #F1F7FB;
   }
 }
 
@@ -36,6 +59,18 @@
   background: #1E3A5A;
 }
 
+html.dark ::-webkit-scrollbar-track {
+  background: rgba(12, 24, 39, 0.7);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #254E7A;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3A6B9F;
+}
+
 /* Custom smooth transitions & frosted glass */
 .frosted-glass {
   background: rgba(255, 255, 255, 0.75);
@@ -51,10 +86,33 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
+html.dark .frosted-glass {
+  background: rgba(13, 25, 39, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(34, 59, 87, 0.6);
+  color: #F1F7FB;
+}
+
+html.dark .frosted-glass-subtle {
+  background: rgba(13, 25, 39, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 /* Subtle pulses */
 @keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.98); }
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
 }
 
 .animate-pulse-subtle {
@@ -63,10 +121,489 @@
 
 /* Smooth fade-in animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out;
+}
+
+/* ==========================================================================
+   IRIS Eye Logo — Sophisticated Clinical AI Animation
+   ========================================================================== */
+
+/* Natural anatomical eyelid blink: 
+   Fast, realistic closure (~200ms) with calm focused rest period (~3.6s) */
+@keyframes iris-natural-blink {
+
+  0%,
+  89%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  92% {
+    transform: scaleY(0.06);
+  }
+
+  95% {
+    transform: scaleY(1);
+  }
+}
+
+/* Pupillary oscillation (hippus): 
+   Restrained micro-dilation (scale 1.00 to 1.08) simulating optical cognitive focus */
+@keyframes iris-pupil-breathe {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* Corneal light glint reflection modulation */
+@keyframes iris-glint-breathe {
+
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+
+  50% {
+    opacity: 0.95;
+  }
+}
+
+/* Mid-aperture ring gentle focus breath */
+@keyframes iris-aperture-breathe {
+
+  0%,
+  100% {
+    opacity: 0.85;
+    stroke-width: 1.4px;
+  }
+
+  50% {
+    opacity: 1.0;
+    stroke-width: 1.6px;
+  }
+}
+
+/* Outer housing ring subtle luminosity breathing */
+@keyframes iris-outer-breathe {
+
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+
+  50% {
+    opacity: 1.0;
+  }
+}
+
+.iris-animating {
+  will-change: transform;
+}
+
+.iris-blink-group {
+  transform-origin: 12px 12px;
+  transform-box: fill-box;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-animating .iris-blink-group {
+  animation: iris-natural-blink 3.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.iris-pupil {
+  transform-origin: 12px 12px;
+  transform-box: fill-box;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.iris-animating .iris-pupil {
+  animation: iris-pupil-breathe 2.4s ease-in-out infinite;
+}
+
+.iris-glint {
+  transition: opacity 0.4s ease;
+}
+
+.iris-animating .iris-glint {
+  animation: iris-glint-breathe 2.4s ease-in-out infinite;
+}
+
+.iris-aperture {
+  transition: opacity 0.4s ease, stroke-width 0.4s ease;
+}
+
+.iris-animating .iris-aperture {
+  animation: iris-aperture-breathe 2.4s ease-in-out infinite;
+}
+
+.iris-outer-ring {
+  transition: opacity 0.4s ease;
+}
+
+.iris-animating .iris-outer-ring {
+  animation: iris-outer-breathe 4.8s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   IRIS Markdown — Adaptive response body styles
+   All responses (medical + conversational) now render via react-markdown.
+   These styles scope all markdown within .iris-markdown to brand tokens.
+   ========================================================================== */
+
+.iris-markdown {
+  line-height: 1.7;
+  color: #0F2537;
+  /* mist-200 */
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 0.9375rem;
+}
+
+/* Vertical rhythm between top-level block elements */
+.iris-markdown>*+* {
+  margin-top: 0.6rem;
+}
+
+/* Headings */
+.iris-markdown h1,
+.iris-markdown h2,
+.iris-markdown h3 {
+  font-family: 'Lora', Georgia, serif;
+  color: #0B192C;
+  /* sapphire-900 */
+  margin-top: 1.2rem;
+  margin-bottom: 0.4rem;
+  line-height: 1.35;
+}
+
+/* Paragraphs */
+.iris-markdown p {
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Lists */
+.iris-markdown ul,
+.iris-markdown ol {
+  margin: 0.5rem 0;
+  padding-left: 1.4rem;
+}
+
+.iris-markdown li {
+  margin: 0.2rem 0;
+  line-height: 1.65;
+}
+
+.iris-markdown ul {
+  list-style-type: disc;
+}
+
+.iris-markdown ul ::marker {
+  color: #3A6B9F;
+  /* sapphire-400 */
+}
+
+.iris-markdown ol {
+  list-style-type: decimal;
+}
+
+.iris-markdown ol ::marker {
+  color: #3A6B9F;
+}
+
+/* Blockquote */
+.iris-markdown blockquote {
+  border-left: 4px solid #3A6B9F;
+  /* sapphire-400 */
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+  background: rgba(224, 250, 255, 0.4);
+  /* frosted-100/40 */
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: italic;
+  color: #1E3A5A;
+  /* sapphire-700 */
+}
+
+/* Inline code */
+.iris-markdown code:not(pre code) {
+  background: #E6EFF8;
+  /* sapphire-100 */
+  color: #1E3A5A;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
+}
+
+/* Code block */
+.iris-markdown pre {
+  background: rgba(15, 37, 55, 0.08);
+  border: 1px solid rgba(37, 78, 122, 0.2);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.iris-markdown pre code {
+  font-size: 0.8125rem;
+  background: none;
+  padding: 0;
+  color: #1E3A5A;
+}
+
+/* Tables */
+.iris-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(37, 78, 122, 0.2);
+}
+
+.iris-markdown thead tr {
+  background-color: #254E7A;
+  /* sapphire-600 */
+}
+
+.iris-markdown thead th {
+  color: #E0FAFF;
+  /* frosted-100 */
+  padding: 0.6rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.iris-markdown tbody tr {
+  border-top: 1px solid #E6EFF8;
+  /* sapphire-100 */
+}
+
+.iris-markdown tbody tr:hover {
+  background-color: rgba(224, 250, 255, 0.5);
+}
+
+.iris-markdown tbody td {
+  padding: 0.55rem 1rem;
+  color: #0F2537;
+  vertical-align: top;
+}
+
+/* Horizontal rule */
+.iris-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(37, 78, 122, 0.15);
+  margin: 1rem 0;
+}
+
+/* Links */
+.iris-markdown a {
+  color: #254E7A;
+  /* sapphire-600 */
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.iris-markdown a:hover {
+  color: #0B192C;
+  /* sapphire-900 */
+}
+
+/* Bold / italic */
+.iris-markdown strong {
+  font-weight: 600;
+  color: #0B192C;
+}
+
+.iris-markdown em {
+  font-style: italic;
+  color: #1E3A5A;
+}
+
+/* ==========================================================================
+   Dark Mode Adaptive Styles for IRIS Markdown & Logo
+   ========================================================================== */
+
+html.dark .iris-markdown {
+  color: #CBD5E1;
+}
+
+html.dark .iris-markdown h1,
+html.dark .iris-markdown h2,
+html.dark .iris-markdown h3 {
+  color: #F1F7FB;
+}
+
+html.dark .iris-markdown ul ::marker,
+html.dark .iris-markdown ol ::marker {
+  color: #38BDF8;
+}
+
+html.dark .iris-markdown blockquote {
+  border-left-color: #3A6B9F;
+  background: rgba(17, 35, 56, 0.65);
+  color: #93C5FD;
+}
+
+html.dark .iris-markdown code:not(pre code) {
+  background: #14253A;
+  color: #9FE2EE;
+}
+
+html.dark .iris-markdown pre {
+  background: rgba(8, 18, 30, 0.95);
+  border-color: rgba(30, 56, 84, 0.7);
+}
+
+html.dark .iris-markdown pre code {
+  color: #9FE2EE;
+}
+
+html.dark .iris-markdown table {
+  border-color: rgba(30, 56, 84, 0.7);
+}
+
+html.dark .iris-markdown thead tr {
+  background-color: #162C44;
+}
+
+html.dark .iris-markdown thead th {
+  color: #9FE2EE;
+}
+
+html.dark .iris-markdown tbody tr {
+  border-top-color: rgba(25, 46, 69, 0.8);
+}
+
+html.dark .iris-markdown tbody tr:hover {
+  background-color: rgba(22, 41, 63, 0.55);
+}
+
+html.dark .iris-markdown tbody td {
+  color: #CBD5E1;
+}
+
+html.dark .iris-markdown hr {
+  border-top-color: rgba(30, 56, 84, 0.6);
+}
+
+html.dark .iris-markdown a {
+  color: #38BDF8;
+}
+
+html.dark .iris-markdown a:hover {
+  color: #9FE2EE;
+}
+
+html.dark .iris-markdown strong {
+  color: #F1F7FB;
+}
+
+html.dark .iris-markdown em {
+  color: #94A3B8;
+}
+
+/* Dark mode eye logo glowing state */
+html.dark .iris-outer-ring {
+  stroke: #3A6B9F !important;
+}
+
+html.dark .iris-aperture {
+  stroke: #5B8ABF !important;
+}
+
+html.dark .iris-pupil {
+  fill: #9FE2EE !important;
+}
+
+html.dark .iris-glint {
+  stroke: #E0FAFF !important;
+}
+
+/* ==========================================================================
+   Dark Mode Global Contrast & Legibility Safety Net
+   ========================================================================== */
+html.dark {
+  color-scheme: dark;
+}
+
+/* Fallback colors for sapphire and mist classes in dark mode when no explicit dark text class is present */
+html.dark :where(.text-sapphire-950, .text-sapphire-900, .text-mist-100) {
+  color: #F8FAFC;
+}
+
+html.dark :where(.text-sapphire-800, .text-mist-200) {
+  color: #F1F5F9;
+}
+
+html.dark :where(.text-sapphire-700, .text-mist-300) {
+  color: #CBD5E1;
+}
+
+html.dark :where(.text-sapphire-600, .text-mist-400) {
+  color: #94A3B8;
+}
+
+/* Ensure markdown text is always crisp and luminous in Dark Mode */
+html.dark .iris-markdown {
+  color: #F1F7FB;
+}
+
+html.dark .iris-markdown p,
+html.dark .iris-markdown li,
+html.dark .iris-markdown td {
+  color: #CBD5E1;
+}
+
+html.dark .iris-markdown h1,
+html.dark .iris-markdown h2,
+html.dark .iris-markdown h3,
+html.dark .iris-markdown h4,
+html.dark .iris-markdown strong {
+  color: #F8FAFC;
+}
+
+html.dark .iris-markdown blockquote {
+  color: #93C5FD;
+  background: rgba(15, 37, 60, 0.5);
+  border-left-color: #38BDF8;
+}
+
+html.dark .iris-markdown a {
+  color: #38BDF8;
+}
+
+html.dark .iris-markdown a:hover {
+  color: #7DD3FC;
+}
+
+/* Dark mode inputs and textareas placeholder */
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94A3B8;
+  opacity: 1;
 }

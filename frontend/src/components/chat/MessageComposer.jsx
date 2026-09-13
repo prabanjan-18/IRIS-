@@ -105,18 +105,18 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
       
       {/* File Attachment Pill */}
       {attachment && (
-        <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-frosted-300 text-xs text-sapphire-900 shadow-soft animate-fadeIn">
-          <AttachmentIcon className="w-4 h-4 text-sapphire-600 shrink-0" />
+        <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] text-xs text-sapphire-900 dark:text-[#EAF6F7] shadow-soft animate-fadeIn">
+          <AttachmentIcon className="w-4 h-4 text-sapphire-600 dark:text-[#38bdf8] shrink-0" />
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-900 font-mono font-bold uppercase">
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-sapphire-100 dark:bg-[#16273c] text-sapphire-900 dark:text-[#38bdf8] font-mono font-bold uppercase">
               {attachment.type}
             </span>
             <span className="font-semibold truncate max-w-xs">{attachment.name}</span>
-            <span className="text-[10px] text-sapphire-500 font-mono">({attachment.size})</span>
+            <span className="text-[10px] text-sapphire-500 dark:text-[#82A8D2] font-mono">({attachment.size})</span>
           </div>
           <button 
             onClick={() => setAttachment(null)}
-            className="text-sapphire-500 hover:text-sapphire-900 ml-1 p-0.5 rounded-full hover:bg-frosted-100 transition-colors"
+            className="text-sapphire-500 dark:text-[#82A8D2] hover:text-sapphire-900 dark:hover:text-white ml-1 p-0.5 rounded-full hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors"
             title="Remove attachment"
           >
             <X className="w-3.5 h-3.5" />
@@ -127,7 +127,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
       {/* Main Form Composer Container */}
       <form
         onSubmit={handleSubmit}
-        className="relative bg-white/95 border border-frosted-300/80 rounded-3xl shadow-card-glow focus-within:border-sapphire-500 transition-all p-2 flex flex-col gap-2 backdrop-blur-md"
+        className="relative bg-white/95 dark:bg-[#0d1b2a]/95 border border-frosted-300/80 dark:border-[#1e3854] rounded-3xl shadow-card-glow focus-within:border-sapphire-500 dark:focus-within:border-[#38bdf8] transition-all p-2 flex flex-col gap-2 backdrop-blur-md"
       >
         {/* Hidden File Inputs */}
         <input
@@ -163,8 +163,8 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
               onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
               className={`p-2 rounded-full transition-colors ${
                 isAttachMenuOpen
-                  ? 'bg-sapphire-800 text-white shadow-soft'
-                  : 'text-sapphire-600 hover:text-sapphire-900 hover:bg-frosted-100'
+                  ? 'bg-sapphire-800 dark:bg-[#2563EB] text-white shadow-soft'
+                  : 'text-sapphire-600 dark:text-[#82A8D2] hover:text-sapphire-900 dark:hover:text-white hover:bg-frosted-100 dark:hover:bg-[#16273c]'
               }`}
               title="Add attachment (Lab Report or Image)"
               aria-label="Add attachment options"
@@ -174,8 +174,8 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
 
             {/* Attachments Popover Menu */}
             {isAttachMenuOpen && (
-              <div className="absolute bottom-full left-0 mb-2.5 w-64 md:w-72 rounded-2xl bg-white border border-frosted-300 shadow-2xl backdrop-blur-xl z-50 p-2 space-y-1 animate-fadeIn">
-                <div className="px-2 py-1.5 border-b border-frosted-200 text-[11px] font-bold text-sapphire-900 uppercase tracking-wider">
+              <div className="absolute bottom-full left-0 mb-2.5 w-64 md:w-72 rounded-2xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] shadow-2xl backdrop-blur-xl z-50 p-2 space-y-1 animate-fadeIn">
+                <div className="px-2 py-1.5 border-b border-frosted-200 dark:border-[#1e344d] text-[11px] font-bold text-sapphire-900 dark:text-[#F1F7FB] uppercase tracking-wider">
                   Add Medical Context
                 </div>
 
@@ -183,14 +183,14 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
                 <button
                   type="button"
                   onClick={() => docInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 transition-colors group"
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-sapphire-100 text-sapphire-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="w-8 h-8 rounded-lg bg-sapphire-100 dark:bg-[#16273c] text-sapphire-800 dark:text-[#38bdf8] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                     <FileText className="w-4 h-4 stroke-[1.8]" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-sapphire-900">Lab Document / PDF</div>
-                    <div className="text-[11px] text-sapphire-600 font-medium">Blood test, lab report, prescription</div>
+                    <div className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB]">Lab Document / PDF</div>
+                    <div className="text-[11px] text-sapphire-600 dark:text-[#82A8D2] font-medium">Blood test, lab report, prescription</div>
                   </div>
                 </button>
 
@@ -198,14 +198,14 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 transition-colors group"
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                     <Image className="w-4 h-4 stroke-[1.8]" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-sapphire-900">Medical Image / Photo</div>
-                    <div className="text-[11px] text-sapphire-600 font-medium">Skin rash, scan, symptom photo</div>
+                    <div className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB]">Medical Image / Photo</div>
+                    <div className="text-[11px] text-sapphire-600 dark:text-[#82A8D2] font-medium">Skin rash, scan, symptom photo</div>
                   </div>
                 </button>
 
@@ -213,14 +213,14 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
                 <button
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 transition-colors group"
+                  className="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                     <Camera className="w-4 h-4 stroke-[1.8]" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-sapphire-900">Take Photo</div>
-                    <div className="text-[11px] text-sapphire-600 font-medium">Snap photo with device camera</div>
+                    <div className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB]">Take Photo</div>
+                    <div className="text-[11px] text-sapphire-600 dark:text-[#82A8D2] font-medium">Snap photo with device camera</div>
                   </div>
                 </button>
               </div>
@@ -235,12 +235,12 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe your symptoms or ask a health question..."
-            className="flex-1 bg-transparent text-sapphire-900 placeholder:text-sapphire-400 font-medium text-sm md:text-base focus:outline-none resize-none py-1.5 px-1 max-h-44 scrollbar-thin"
+            className="flex-1 bg-transparent text-sapphire-900 dark:text-[#F1F7FB] placeholder:text-sapphire-400 dark:placeholder:text-slate-400 font-medium text-sm md:text-base focus:outline-none resize-none py-1.5 px-1 max-h-44 scrollbar-thin"
           />
         </div>
 
         {/* Controls Toolbar Row */}
-        <div className="flex items-center justify-between px-2 pt-1 border-t border-frosted-300/40 flex-wrap gap-2">
+        <div className="flex items-center justify-between px-2 pt-1 border-t border-frosted-300/40 dark:border-[#1e3854]/50 flex-wrap gap-2">
           
           {/* Left Toolbar: Reasoning Toggle & Model Selector */}
           <div className="flex items-center gap-2">
@@ -249,14 +249,14 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
               onClick={() => setIsThinkingMode(!isThinkingMode)}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${
                 isThinkingMode
-                  ? 'bg-sapphire-100 border-sapphire-400 text-sapphire-900'
-                  : 'bg-frosted-100/60 border-frosted-300 text-sapphire-700 hover:text-sapphire-900'
+                  ? 'bg-sapphire-100 dark:bg-[#1e3a5f] border-sapphire-400 dark:border-[#38bdf8] text-sapphire-900 dark:text-[#F1F7FB]'
+                  : 'bg-frosted-100/60 dark:bg-[#132337] border-frosted-300 dark:border-[#1e3854] text-sapphire-700 dark:text-[#82A8D2] hover:text-sapphire-900 dark:hover:text-white'
               }`}
               title="Enable multi-step clinical reasoning model"
             >
               <Brain className="w-3.5 h-3.5 stroke-[1.5]" />
               <span>Reasoning</span>
-              <span className={`w-1.5 h-1.5 rounded-full ${isThinkingMode ? 'bg-sapphire-700' : 'bg-sapphire-400'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isThinkingMode ? 'bg-sapphire-700 dark:bg-[#38bdf8]' : 'bg-sapphire-400 dark:bg-[#64748B]'}`} />
             </button>
 
             {/* Model Switching Dropdown inside Prompt Input Area */}
@@ -277,7 +277,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
               className={`p-2 rounded-full transition-colors ${
                 isRecording
                   ? 'bg-red-600 text-white animate-pulse'
-                  : 'text-sapphire-600 hover:text-sapphire-900 hover:bg-frosted-100'
+                  : 'text-sapphire-600 dark:text-[#82A8D2] hover:text-sapphire-900 dark:hover:text-white hover:bg-frosted-100 dark:hover:bg-[#16273c]'
               }`}
               title={isRecording ? "Stop dictation" : "Dictate symptoms"}
               aria-label="Voice input"
@@ -291,8 +291,8 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
               disabled={!inputText.trim() && !attachment}
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                 inputText.trim() || attachment
-                  ? 'bg-sapphire-800 text-white hover:bg-sapphire-900 hover:scale-105 active:scale-95 shadow-soft'
-                  : 'bg-frosted-300/60 text-sapphire-400 cursor-not-allowed opacity-50'
+                  ? 'bg-sapphire-800 dark:bg-[#2563EB] text-white hover:bg-sapphire-900 dark:hover:bg-[#1D4ED8] hover:scale-105 active:scale-95 shadow-soft'
+                  : 'bg-frosted-300/60 dark:bg-[#16273c] text-sapphire-400 dark:text-[#64748B] cursor-not-allowed opacity-50'
               }`}
               aria-label="Send message"
             >

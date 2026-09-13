@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = "your_openrouter_api_key_here"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_PRIMARY_MODEL: str = "openrouter/free"
+    GOOGLE_MAPS_API_KEY: str = ""
     
     # Active Verified Free Models
     MODEL_OPENROUTER_FREE: str = "openrouter/free"
@@ -23,8 +24,8 @@ class Settings(BaseSettings):
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    FRONTEND_URL: str = "http://localhost:5173"
-    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000"
+    FRONTEND_URL: str = "http://localhost:5174"
+    CORS_ORIGINS: str = "http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,*"
     
     ENABLE_HEAVY_EMBEDDINGS: bool = False
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"

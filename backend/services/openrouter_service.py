@@ -1,271 +1,257 @@
-import json
 import re
 import time
 import httpx
 from typing import Dict, Any, List, Optional
 from config import get_settings, settings
-from models.schemas import StructuredData, SourceItem, ChatResponse
-from utils.prompts import build_system_prompt
+from models.schemas import ChatResponse, HospitalResult
+from utils.prompts import build_system_prompt, build_conversational_prompt, build_classifier_prompt, build_hospital_intro_prompt
 from services.rag_service import rag_service
+from services.location_service import location_service
 
 class OpenRouterService:
     def __init__(self):
-        pass
-
-    def _clean_json_string(self, text: str) -> str:
-        """Strip markdown code blocks ```json ... ``` and leading/trailing whitespace."""
-        text = text.strip()
-        match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        return text
-
-    def _is_explicit_non_healthcare_query(self, user_text: str) -> bool:
-        """Check if the user prompt is explicitly an out-of-domain query
-        (e.g., coding/programming, math calculations, sports scores, entertainment, etc.)."""
-        text_lower = user_text.lower().strip()
-        
-        health_and_meta = {
-            "health", "medical", "doctor", "hospital", "clinic", "symptom", "pain", "fever",
-            "cough", "headache", "rash", "infection", "virus", "bacteria", "disease", "sick",
-            "illness", "medicine", "medication", "pill", "drug", "prescription", "dosage",
-            "side effect", "blood", "heart", "chest", "lung", "breath", "breathing", "stomach",
-            "nausea", "vomit", "diarrhea", "throat", "head", "eye", "ear", "skin", "joint",
-            "muscle", "fatigue", "dizzy", "dizziness", "sleep", "diet", "nutrition", "vitamin",
-            "exercise", "wellness", "mental", "anxiety", "depression", "stress", "injury",
-            "burn", "wound", "bleed", "bleeding", "stroke", "cancer", "diabetes", "asthma",
-            "allergy", "allergic", "emergency", "triage", "treatment", "therapy", "cure",
-            "diagnosis", "patient", "nurse", "physician", "pediatric", "cardio", "pharma",
-            "vaccine", "flu", "covid", "cold", "body", "bones", "liver", "kidney", "brain",
-            "blood pressure", "temperature", "pulse", "chills", "ache", "sore", "swelling",
-            "hi", "hello", "hey", "who are you", "what can you do", "help", "iris", "thanks"
+        # Medical keywords for fast-path intent classification
+        self._medical_keywords = {
+            "symptom", "symptoms", "pain", "fever", "cough", "headache", "rash", "infection",
+            "virus", "bacteria", "disease", "sick", "illness", "medicine", "medication",
+            "pill", "drug", "prescription", "dosage", "side effect", "side effects",
+            "blood", "heart", "chest", "lung", "breath", "breathing", "stomach",
+            "nausea", "vomit", "vomiting", "diarrhea", "throat", "sore throat",
+            "eye pain", "ear pain", "skin", "joint", "muscle", "fatigue", "dizzy",
+            "dizziness", "insomnia", "sleep problem", "diet", "nutrition", "vitamin",
+            "supplement", "wellness", "mental health", "anxiety", "depression", "stress",
+            "injury", "burn", "wound", "bleed", "bleeding", "stroke", "cancer", "diabetes",
+            "asthma", "allergy", "allergic", "allergies", "emergency", "triage", "treatment",
+            "therapy", "cure", "diagnosis", "diagnose", "patient", "nurse", "physician",
+            "pediatric", "cardio", "pharma", "vaccine", "vaccination", "flu", "covid",
+            "cold symptoms", "body ache", "body aches", "bones", "liver", "kidney", "brain",
+            "blood pressure", "temperature", "pulse", "chills", "ache", "swelling", "swollen",
+            "pregnant", "pregnancy", "period", "menstrual", "cholesterol", "obesity",
+            "weight loss", "weight gain", "bmi", "calories", "hospital", "clinic", "doctor",
+            "urgent care", "er visit", "medical", "health", "healthcare", "ibuprofen",
+            "acetaminophen", "tylenol", "advil", "antibiotic", "antiviral", "inhaler",
+            "epipen", "insulin", "bandage", "fracture", "sprain", "concussion",
+            "food poisoning", "dehydration", "sunburn", "frostbite", "bite", "sting",
+            "shortness of breath", "chest pain", "heart attack", "seizure", "faint",
+            "unconscious", "overdose", "poison", "surgery", "operation", "x-ray", "mri",
+            "ct scan", "ultrasound", "lab test", "blood test", "urine test"
         }
+
+        # Location keywords for nearby hospital/clinic finder
+        self._location_keywords = [
+            "hospital near", "hospitals near", "nearby hospital", "nearby hospitals",
+            "nearest hospital", "nearest er", "nearest emergency", "nearest clinic",
+            "find hospital", "find clinic", "find a hospital", "find a clinic",
+            "emergency room near", "urgent care near", "clinic near", "clinics near",
+            "where to go for", "where should i go", "hospital to visit",
+            "hospitals to visit", "hospital around", "hospitals around",
+            "nearby er", "nearby emergency room", "nearby urgent care",
+            "find me a hospital", "find me a clinic", "find me a doctor",
+            "find nearby", "locate hospital", "locate clinic",
+            "medical facility near", "healthcare near", "health center near",
+            "pharmacy near", "nearest pharmacy", "nearby pharmacy",
+            "doctor near", "doctors near", "nearest doctor"
+        ]
+
+        # Chat keywords for fast-path (clear non-medical)
+        self._chat_keywords = {
+            "hi", "hello", "hey", "howdy", "good morning", "good afternoon", "good evening",
+            "good night", "bye", "goodbye", "see you", "thanks", "thank you", "thx",
+            "who are you", "what are you", "what can you do", "what is your name",
+            "your name", "tell me about yourself", "how are you", "whats up", "what's up",
+            "tell me a joke", "joke", "fun fact", "interesting fact",
+            "nice to meet you", "pleased to meet", "i need help", "help me",
+            "ok", "okay", "sure", "yes", "no", "yeah", "nah", "cool", "great",
+            "awesome", "wow", "lol", "haha", "hmm", "oh", "ah",
+            "what time", "weather", "news", "recommend", "suggest",
+            "favorite", "favourite", "opinion", "think about"
+        }
+
+    def _classify_intent_fast(self, user_text: str) -> Optional[str]:
+        """Fast keyword/regex-based intent classification.
+        Returns 'direct_location', 'hospital_recommendation', 'location', 'medical', 'chat', or None (ambiguous)."""
+        text_lower = user_text.lower().strip()
+        word_count = len(text_lower.split())
+
+        # 1. Direct Location Lookup: Asking for a specific named hospital
+        direct_patterns = [
+            r"\bwhere\s+is\s+(?:the\s+)?([a-z0-9\s]+(?:hospital|clinic|medical\s+center|infirmary|sanatorium))",
+            r"\bfind\s+(?:the\s+)?([a-z0-9\s]+(?:hospital|clinic|medical\s+center))\s*(?:near\s+me|nearby)?",
+            r"\blocation\s+of\s+(?:the\s+)?([a-z0-9\s]+(?:hospital|clinic|medical\s+center))",
+            r"\bwhere\s+is\s+([a-z0-9\s]+(?:hospital|clinic))\b"
+        ]
+        for pat in direct_patterns:
+            if re.search(pat, text_lower):
+                return "direct_location"
+
+        # 2. Recommendation Lookup: Asking for best/recommended hospitals for a condition or specialty
+        rec_patterns = [
+            r"\bbest\s+hospital[s]?\s+for\b",
+            r"\btop\s+hospital[s]?\s+for\b",
+            r"\bwhich\s+hospital\s+should\s+i\s+go\s+to\b",
+            r"\bhospital[s]?\s+for\s+[a-z\s]+(?:near\s+me|in\b)",
+            r"\b[a-z]+\s+hospital[s]?\s+near\s+me\b",
+            r"\bwhere\s+should\s+i\s+go\s+for\s+(?:a\s+|an\s+)?[a-z]+",
+            r"\bwhere\s+to\s+go\s+for\s+(?:a\s+|an\s+)?[a-z]+"
+        ]
+        for pat in rec_patterns:
+            if re.search(pat, text_lower):
+                return "hospital_recommendation"
+
+        # 3. General Location Queries (Hospital / Clinic finder)
+        for kw in self._location_keywords:
+            if kw in text_lower:
+                return "location"
+
+        location_indicators = ["near me", "nearby", "closest", "nearest", "around me", "around here", "close to me", "visit near", "in my area", "to visit near"]
+        facility_indicators = ["hospital", "hospitals", "clinic", "clinics", "er", "emergency room", "doctor", "doctors", "urgent care", "medical center", "healthcare center", "pharmacy", "pharmacies"]
+        if any(loc in text_lower for loc in location_indicators) and any(fac in text_lower for fac in facility_indicators):
+            return "location"
         
-        non_health_triggers = [
-            "python", "javascript", "code", "coding", "html", "css", "sql", "java", "c++",
-            "programming", "algorithm", "script", "software", "debug", "compile",
-            "calculate", "equation", "algebra", "calculus", "capital of", "who won",
-            "cricket", "football", "soccer", "nba", "match", "movie", "song", "actor",
-            "joke", "recipe", "car engine", "oil change", "politics", "president",
-            "stock price", "crypto", "bitcoin"
+        # Check for medical keywords (multi-word first, then single-word)
+        has_medical = False
+        for kw in self._medical_keywords:
+            if kw in text_lower:
+                has_medical = True
+                break
+        
+        # Check for chat keywords
+        has_chat = False
+        for kw in self._chat_keywords:
+            if kw in text_lower:
+                has_chat = True
+                break
+
+        # Clear medical signal
+        if has_medical and not has_chat:
+            return "medical"
+        
+        # Clear chat signal with no medical overlap
+        if has_chat and not has_medical:
+            return "chat"
+        
+        # Very short messages without medical keywords are likely chat
+        if word_count <= 3 and not has_medical:
+            return "chat"
+        
+        # Both signals present or neither — ambiguous, need LLM classifier
+        return None
+
+    async def _classify_intent_llm(self, user_text: str, api_key: str, api_url: str, model: str, referer: str) -> str:
+        """Use LLM to classify ambiguous messages.
+        Returns 'direct_location', 'hospital_recommendation', 'location', 'medical', or 'chat'."""
+        classifier_prompt = build_classifier_prompt(user_text)
+        
+        messages = [
+            {"role": "user", "content": classifier_prompt}
         ]
         
-        has_non_health = any(trigger in text_lower for trigger in non_health_triggers)
-        has_health = any(kw in text_lower for kw in health_and_meta)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": referer,
+            "X-Title": "IRIS Health Assistant",
+            "Content-Type": "application/json"
+        }
         
-        return has_non_health and not has_health
-
-    def _build_scope_notice_structured_data(self, user_text: str) -> StructuredData:
-        """Structured response informing user that IRIS is dedicated to healthcare & medical questions."""
-        return StructuredData(
-            triageLevel="self",
-            triageLabel="IRIS Healthcare & Medical Scope",
-            summary=(
-                f"Iris is an AI assistant dedicated specifically to medical, clinical, and healthcare-related questions "
-                f"(such as symptom evaluation, hospital guidance, medications, and wellness). "
-                f"Your query regarding '{user_text.strip()}' appears to be outside my medical scope. "
-                f"If you have any health concerns, symptoms, or medical questions, please feel free to ask!"
-            ),
-            causes=[
-                "Query is outside IRIS medical & healthcare domain scope",
-                "IRIS is specialized for clinical decision support and patient triage"
-            ],
-            selfCare=[
-                "Ask IRIS about any symptom, pain, fever, or medication concern",
-                "Consult IRIS for hospital guidance, triage levels, and self-care steps"
-            ],
-            whenToSeekCare=[
-                "For medical emergencies or acute symptoms, call 911/112 immediately"
-            ],
-            sources=[
-                SourceItem(
-                    title="IRIS Healthcare Assistant Scope",
-                    url="http://127.0.0.1:8000",
-                    snippet="IRIS is dedicated to medical triage, clinical evidence synthesis, and healthcare guidance."
-                )
-            ]
-        )
-
-    def _parse_structured_data(self, raw_content: str, user_text: str, is_clinical: bool) -> StructuredData:
-        """Parse raw content from LLM into a validated StructuredData model.
-        If JSON parsing fails, the raw LLM text is used directly as the summary
-        so the user always sees real LLM output, never generic fallback text.
-        """
         try:
-            cleaned = self._clean_json_string(raw_content)
-            parsed = json.loads(cleaned)
-            if isinstance(parsed, str):
-                parsed = json.loads(parsed)
-            if isinstance(parsed, dict):
-                normalized = {}
-                normalized["triageLevel"] = parsed.get("triageLevel") or parsed.get("triage_level") or "self"
-                if normalized["triageLevel"] not in ["self", "caution", "urgent"]:
-                    normalized["triageLevel"] = "self"
-                
-                normalized["triageLabel"] = parsed.get("triageLabel") or parsed.get("triage_label") or "Self-care may be appropriate"
-                normalized["summary"] = parsed.get("summary") or f"Analysis for query: '{user_text}'"
-                
-                causes = parsed.get("causes") or []
-                normalized["causes"] = [str(c) for c in causes] if isinstance(causes, list) else [str(causes)]
-                
-                self_care = parsed.get("selfCare") or parsed.get("self_care") or []
-                normalized["selfCare"] = [str(s) for s in self_care] if isinstance(self_care, list) else [str(self_care)]
-                
-                seek_care = parsed.get("whenToSeekCare") or parsed.get("when_to_seek_care") or []
-                normalized["whenToSeekCare"] = [str(w) for w in seek_care] if isinstance(seek_care, list) else [str(seek_care)]
-                
-                raw_sources = parsed.get("sources") or []
-                valid_sources = []
-                if isinstance(raw_sources, list):
-                    for item in raw_sources:
-                        if isinstance(item, dict):
-                            valid_sources.append(SourceItem(
-                                title=str(item.get("title", "Medical Reference")),
-                                url=str(item.get("url", "https://medlineplus.gov")),
-                                snippet=str(item.get("snippet", "Evidence-based health guideline."))
-                            ))
-                        elif isinstance(item, str):
-                            valid_sources.append(SourceItem(
-                                title="Medical Reference",
-                                url="https://medlineplus.gov",
-                                snippet=item
-                            ))
-                normalized["sources"] = valid_sources if valid_sources else [
-                    SourceItem(title="NIH MedlinePlus", url="https://medlineplus.gov", snippet="Trusted consumer health information.")
-                ]
-                return StructuredData(**normalized)
-        except Exception as err:
-            print(f"[OpenRouter Service] JSON parse failed ({err}). Using raw LLM text as summary.")
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.0,
+                    "max_tokens": 10
+                }
+                response = await client.post(api_url, headers=headers, json=payload)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    if "choices" in res_json and len(res_json["choices"]) > 0:
+                        msg_obj = res_json["choices"][0].get("message", {})
+                        raw_content = msg_obj.get("content") or ""
+                        result = raw_content.strip().lower()
+                        # Extract classification word
+                        if "direct_location" in result:
+                            return "direct_location"
+                        elif "hospital_recommendation" in result:
+                            return "hospital_recommendation"
+                        elif "location" in result:
+                            return "location"
+                        elif "medical" in result:
+                            return "medical"
+                        elif "chat" in result:
+                            return "chat"
+        except Exception as e:
+            print(f"[Intent Classifier] LLM classification failed: {e}")
         
-        return self._build_raw_llm_structured_data(raw_content, user_text, is_clinical)
+        # Default to medical to be safe — never miss a health query
+        return "medical"
 
-    def _build_raw_llm_structured_data(self, raw_content: str, user_text: str, is_clinical: bool) -> StructuredData:
-        """When the LLM returns non-JSON text, wrap the raw LLM output into
-        a StructuredData card so the user always sees real LLM content."""
-        clean_text = raw_content.strip()
-        
-        text_lower = clean_text.lower()
-        if any(kw in text_lower for kw in ["urgent", "emergency", "immediately", "call 911", "seek immediate"]):
-            triage_level = "urgent"
-            triage_label = "Seek urgent/emergency care"
-        elif any(kw in text_lower for kw in ["doctor", "medical attention", "see a doctor", "consult", "appointment"]):
-            triage_level = "caution"
-            triage_label = "Consider seeing a doctor soon"
-        else:
-            triage_level = "self"
-            triage_label = "Self-care may be appropriate"
-        
-        return StructuredData(
-            triageLevel=triage_level,
-            triageLabel=triage_label,
-            summary=clean_text,
-            causes=[],
-            selfCare=[],
-            whenToSeekCare=[],
-            sources=[
-                SourceItem(
-                    title="Live AI Model Response",
-                    url="https://openrouter.ai",
-                    snippet="This response was generated directly by an AI language model via OpenRouter."
-                )
-            ]
+    def _build_fallback_text(self, user_text: str, has_valid_key: bool) -> str:
+        """Return a prose fallback when OpenRouter is unavailable."""
+        if not has_valid_key:
+            return (
+                "⚠️ **API Key Required**\n\n"
+                "To get live AI responses from Iris, please add your OpenRouter API key to `backend/.env`:\n\n"
+                "1. Visit [openrouter.ai/keys](https://openrouter.ai/keys) to create a free key\n"
+                "2. Copy your key (starts with `sk-or-v1-...`)\n"
+                "3. Paste it as `OPENROUTER_API_KEY=...` in `c:\\IRIS\\backend\\.env`\n"
+                "4. Restart the backend server\n"
+            )
+        text_lower = user_text.lower()
+        if any(kw in text_lower for kw in ["chest pain", "heart attack", "stroke", "short of breath", "can't breathe", "unconscious"]):
+            return (
+                "<!--triage:urgent-->\n\n"
+                "This sounds like it could be a serious medical emergency. Please **call emergency services (911/112) immediately** "
+                "rather than relying on this assistant.\n\n"
+                "Do not delay seeking help — time is critical in cardiac and respiratory emergencies."
+            )
+        return (
+            f"I'm having trouble reaching the AI models right now. For your question about *{user_text.strip()[:80]}*, "
+            "please try again in a moment, or consult a qualified healthcare professional for personalized advice."
         )
 
-    def _build_fallback_structured_data(self, user_text: str, is_clinical: bool, reason: str = "") -> StructuredData:
-        """Generate safe fallback response if OpenRouter call fails or API key is unconfigured."""
-        text_lower = user_text.lower()
+    def _placeholder_removed_json_pipeline(self):
+        # Removed: _clean_json_string, _parse_structured_data,
+        # _build_raw_llm_structured_data, _build_fallback_structured_data
+        # Medical responses now return adaptive Markdown text directly.
+        pass
+
+
+
+    async def _call_llm(self, messages: list, api_key: str, api_url: str, candidate_models: list, referer: str, temperature: float = 0.2, max_tokens: int = None) -> tuple:
+        """Call OpenRouter LLM with model fallback chain. Returns (raw_content, model_used) or (None, None)."""
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": referer,
+            "X-Title": "IRIS Health Assistant",
+            "Content-Type": "application/json"
+        }
+
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            for model_name in candidate_models:
+                try:
+                    print(f"[OpenRouter Service] Sending prompt to model: {model_name} via {api_url}...")
+                    payload = {
+                        "model": model_name,
+                        "messages": messages,
+                        "temperature": temperature
+                    }
+                    if max_tokens:
+                        payload["max_tokens"] = max_tokens
+                    
+                    response = await client.post(api_url, headers=headers, json=payload)
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        if "choices" in res_json and len(res_json["choices"]) > 0:
+                            raw_content = res_json["choices"][0]["message"]["content"]
+                            print(f"[OpenRouter Service] Successfully received LLM response from '{model_name}'.")
+                            return raw_content, model_name
+                    else:
+                        print(f"[OpenRouter Service] Model '{model_name}' returned status {response.status_code}: {response.text}")
+                except Exception as e:
+                    print(f"[OpenRouter Service] Exception calling OpenRouter model '{model_name}': {e}")
+                    continue
         
-        is_urgent = any(kw in text_lower for kw in ["chest pain", "heart", "short of breath", "breathing", "severe bleed", "stroke"])
-        is_caution = any(kw in text_lower for kw in ["fever", "temperature", "flu", "cough", "infection", "vomit"])
-        
-        if is_urgent:
-            return StructuredData(
-                triageLevel="urgent",
-                triageLabel="Seek urgent/emergency care",
-                summary=f"URGENT ALERT: Symptoms related to '{user_text.strip()}' require immediate clinical evaluation to rule out acute emergency conditions.",
-                causes=[
-                    "Acute Cardiopulmonary / Coronary Syndrome",
-                    "Severe Respiratory Distress",
-                    "Acute Vascular or Neurological Emergency"
-                ],
-                selfCare=[
-                    "Cease physical exertion immediately and sit upright.",
-                    "Call emergency service (911/112) immediately. Do not drive yourself.",
-                    "Loosen restrictive clothing."
-                ],
-                whenToSeekCare=[
-                    "SEEK IMMEDIATE EMERGENCY CARE NOW. Radiating chest pain, diaphoresis, or sudden dizziness are critical red flags."
-                ],
-                sources=[
-                    SourceItem(title="American College of Cardiology", url="https://www.acc.org", snippet="Chest discomfort with exertional dyspnea requires immediate emergency triage."),
-                    SourceItem(title="Mayo Clinic Emergency Medicine", url="https://www.mayoclinic.org", snippet="Prompt ECG and clinical evaluation are indicated for acute dyspnea.")
-                ]
-            )
-        elif is_caution:
-            return StructuredData(
-                triageLevel="caution",
-                triageLabel="Consider seeing a doctor soon",
-                summary="Febrile or respiratory presentation analysis suggests immune activation secondary to viral or bacterial etiology." if is_clinical else f"Your symptoms regarding '{user_text.strip()}' indicate an active immune response (likely viral or bacterial infection).",
-                causes=[
-                    "Viral Upper Respiratory Infection (Influenza, COVID-19)",
-                    "Acute Pharyngitis or Bronchitis",
-                    "Systemic inflammatory response"
-                ],
-                selfCare=[
-                    "Maintain continuous oral hydration (water, electrolyte broth).",
-                    "Prioritize complete bed rest.",
-                    "Use OTC antipyretics (Acetaminophen or Ibuprofen) as medically appropriate."
-                ],
-                whenToSeekCare=[
-                    "Fever exceeds 103°F (39.4°C) or persists > 3 days.",
-                    "Stiff neck, confusion, or shortness of breath develops."
-                ],
-                sources=[
-                    SourceItem(title="CDC Adult Health Guidelines", url="https://www.cdc.gov", snippet="Fever >3 days or associated toxic appearance warrants clinical evaluation."),
-                    SourceItem(title="NIH MedlinePlus", url="https://medlineplus.gov", snippet="Hydration and rest are essential primary measures for acute viral illness.")
-                ]
-            )
-        else:
-            note_reason = f" [Notice: {reason}]" if reason else ""
-            summary_text = (
-                f"⚠️ [API Key Required to Connect Live LLM] To receive live responses from OpenRouter models (Gemma, GLM, Llama, etc.), please set your OPENROUTER_API_KEY in backend/.env.{note_reason}"
-                if "API Key" in reason
-                else f"Here is structured guidance regarding '{user_text.strip()}': Most mild symptoms improve with rest, proper hydration, and simple self-care{note_reason}."
-            )
-            return StructuredData(
-                triageLevel="self",
-                triageLabel="OpenRouter API Key Required" if "API Key" in reason else "Self-care may be appropriate",
-                summary=summary_text,
-                causes=[
-                    "OPENROUTER_API_KEY is currently set to placeholder in backend/.env",
-                    "OpenRouter API endpoints require authentication to generate live completions",
-                    "Local offline rule engine active as fallback"
-                ] if "API Key" in reason else [
-                    "Mild muscular strain or transient physiological disruption",
-                    "Lifestyle factors (fatigue, mild dehydration, stress)",
-                    "Early self-limiting immune reaction"
-                ],
-                selfCare=[
-                    "Open https://openrouter.ai/keys to create a free API key",
-                    "Copy your API key (e.g. sk-or-v1-...)",
-                    "Paste it into OPENROUTER_API_KEY inside c:\\IRIS\\backend\\.env"
-                ] if "API Key" in reason else [
-                    "Maintain good hydration and balanced nutrition",
-                    "Ensure 7-8 hours of restful sleep",
-                    "Monitor symptoms over the next 24-48 hours"
-                ],
-                whenToSeekCare=[
-                    "Get your free key at https://openrouter.ai/keys",
-                    "Restart backend server or send prompt again after saving key"
-                ] if "API Key" in reason else [
-                    "If symptoms worsen or fail to improve after 3 to 5 days",
-                    "If severe pain, high fever, or unexpected weakness develops"
-                ],
-                sources=[
-                    SourceItem(title="OpenRouter API Keys Dashboard", url="https://openrouter.ai/keys", snippet="Create free API key to enable live model inference."),
-                    SourceItem(title="IRIS Backend Config Documentation", url="file:///c:/IRIS/backend/.env", snippet="Backend environment file where OPENROUTER_API_KEY is configured.")
-                ]
-            )
+        return None, None
 
     async def generate_response(
         self,
@@ -273,26 +259,178 @@ class OpenRouterService:
         conversation_history: List[Dict[str, str]] = None,
         is_clinical_mode: bool = False,
         session_id: str = "default-session",
-        requested_model: Optional[str] = None
+        requested_model: Optional[str] = None,
+        user_location: Optional[Dict[str, float]] = None
     ) -> ChatResponse:
         
-        # 0. Check if query is explicitly non-healthcare related
-        if self._is_explicit_non_healthcare_query(user_message_text):
-            print(f"[OpenRouter Service] Non-healthcare query detected: '{user_message_text}'. Returning Iris domain scope notice.")
-            scope_response = self._build_scope_notice_structured_data(user_message_text)
-            
-            # Save turn to RAG memory for conversation continuity
+        current_settings = get_settings()
+        api_key = current_settings.OPENROUTER_API_KEY.strip()
+        has_valid_key = api_key and api_key != "your_openrouter_api_key_here"
+        api_url = f"{current_settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+        referer = current_settings.FRONTEND_URL if current_settings.FRONTEND_URL else "https://openrouter.ai"
+
+        # Build candidate model list
+        candidate_models = []
+        if requested_model:
+            candidate_models.append(requested_model)
+        if current_settings.OPENROUTER_PRIMARY_MODEL and current_settings.OPENROUTER_PRIMARY_MODEL not in candidate_models:
+            candidate_models.append(current_settings.OPENROUTER_PRIMARY_MODEL)
+        for fallback in current_settings.fallback_models_list:
+            if fallback not in candidate_models:
+                candidate_models.append(fallback)
+
+        # ──────────────────────────────────────────────
+        # STEP 1: CLASSIFY INTENT
+        # ──────────────────────────────────────────────
+        intent = self._classify_intent_fast(user_message_text)
+        
+        if intent is None and has_valid_key:
+            # Ambiguous — use LLM classifier
+            print(f"[Intent Classifier] Ambiguous query, using LLM classifier for: '{user_message_text}'")
+            classifier_model = candidate_models[0] if candidate_models else "openrouter/free"
+            intent = await self._classify_intent_llm(user_message_text, api_key, api_url, classifier_model, referer)
+        elif intent is None:
+            # No API key and ambiguous — default to chat for general feel
+            intent = "chat"
+        
+        print(f"[Intent Classifier] Query classified as: '{intent}' for message: '{user_message_text[:60]}...'")
+
+        # ──────────────────────────────────────────────
+        # STEP 1b: HOSPITAL LOCATION / RECOMMENDATION MODE
+        # ──────────────────────────────────────────────
+        if intent in ["direct_location", "hospital_recommendation", "location"]:
+            user_lat = user_location.get("lat") if user_location else None
+            user_lng = user_location.get("lng") if user_location else None
+
+            specialty, hospitals, loc_label = await location_service.resolve_hospital_query(
+                query_type=intent,
+                user_text=user_message_text,
+                user_lat=user_lat,
+                user_lng=user_lng
+            )
+
             rag_service.add_to_memory(session_id, "user", user_message_text)
-            rag_service.add_to_memory(session_id, "assistant", scope_response.summary)
+
+            # Case A: Hospital(s) resolved
+            if hospitals and len(hospitals) > 0:
+                intro_text = None
+                if has_valid_key:
+                    try:
+                        intro_prompt = build_hospital_intro_prompt(
+                            user_query=user_message_text,
+                            specialty=specialty,
+                            count=len(hospitals),
+                            location_context=loc_label
+                        )
+                        intro_messages = [{"role": "user", "content": intro_prompt}]
+                        intro_raw, _ = await self._call_llm(
+                            intro_messages, api_key, api_url, candidate_models, referer, temperature=0.3, max_tokens=120
+                        )
+                        if intro_raw and len(intro_raw.strip()) > 5:
+                            intro_text = intro_raw.strip().strip('"')
+                    except Exception as e:
+                        print(f"[OpenRouter Service] LLM intro prompt generation failed: {e}")
+
+                if not intro_text:
+                    if intent == "direct_location":
+                        intro_text = f"Here is the location for **{hospitals[0].name}**:"
+                    elif intent == "hospital_recommendation":
+                        intro_text = f"For {specialty.lower()}, here are recommended medical facilities near {loc_label}:"
+                    else:
+                        intro_text = f"Here are hospitals and emergency medical facilities near {loc_label}:"
+
+                rag_service.add_to_memory(session_id, "assistant", intro_text)
+
+                return ChatResponse(
+                    id=f"msg-{int(time.time()*1000)}",
+                    sender="assistant",
+                    timestamp=time.strftime("%I:%M %p"),
+                    text=intro_text,
+                    reply=intro_text,
+                    responseType="hospital_results",
+                    hospitals=hospitals,
+                    ragContextUsed=[],
+                    modelUsed="iris-location-service"
+                )
+
+            # Case B: No hospitals found because no location/city provided -> Ask clarifying question
+            clarifying_text = (
+                f"To help you find the best hospitals for {specialty.lower() if specialty else 'your health concern'}, "
+                "could you please share your city or neighborhood, or enable browser location access?"
+            )
+            rag_service.add_to_memory(session_id, "assistant", clarifying_text)
+
+            return ChatResponse(
+                id=f"msg-{int(time.time()*1000)}",
+                sender="assistant",
+                timestamp=time.strftime("%I:%M %p"),
+                text=clarifying_text,
+                reply=clarifying_text,
+                responseType="conversation",
+                hospitals=None,
+                ragContextUsed=[],
+                modelUsed="iris-location-service"
+            )
+
+        # ──────────────────────────────────────────────
+        # STEP 2a: CONVERSATION MODE — plain text reply
+        # ──────────────────────────────────────────────
+        if intent == "chat":
+            # Store user message in RAG memory for continuity
+            rag_service.add_to_memory(session_id, "user", user_message_text)
+            
+            # Retrieve light conversation context (recent turns only, no heavy medical retrieval)
+            recent_memory = rag_service.retrieve_relevant_memory(session_id, user_message_text, top_k=3)
+            
+            if has_valid_key:
+                # Build conversational prompt
+                system_prompt = build_conversational_prompt(recent_memory)
+                messages = [{"role": "system", "content": system_prompt}]
+                
+                if conversation_history:
+                    for turn in conversation_history[-6:]:
+                        role = turn.get("role", "user")
+                        content = turn.get("content", "")
+                        if content and role in ["user", "assistant"]:
+                            messages.append({"role": role, "content": content})
+                
+                messages.append({"role": "user", "content": user_message_text})
+                
+                raw_content, model_used = await self._call_llm(messages, api_key, api_url, candidate_models, referer, temperature=0.7)
+                
+                if raw_content:
+                    # Clean any accidental JSON wrapping
+                    reply_text = raw_content.strip()
+                    # Store assistant reply in memory
+                    rag_service.add_to_memory(session_id, "assistant", reply_text)
+                    
+                    return ChatResponse(
+                        id=f"msg-{int(time.time()*1000)}",
+                        sender="assistant",
+                        timestamp=time.strftime("%I:%M %p"),
+                        text=reply_text,
+                        responseType="conversation",
+                        ragContextUsed=recent_memory,
+                        modelUsed=model_used
+                    )
+            
+            # Fallback conversational response (no API key or LLM failure)
+            fallback_text = "Hello! I'm Iris, your health assistant. I'm here to help with any medical or health-related questions you might have. How can I assist you today?"
+            rag_service.add_to_memory(session_id, "assistant", fallback_text)
             
             return ChatResponse(
                 id=f"msg-{int(time.time()*1000)}",
                 sender="assistant",
                 timestamp=time.strftime("%I:%M %p"),
-                structuredData=scope_response,
+                text=fallback_text,
+                responseType="conversation",
                 ragContextUsed=[],
-                modelUsed="iris-domain-guardrail"
+                modelUsed="fallback-conversational"
             )
+
+        # ──────────────────────────────────────────────
+        # STEP 2b: MEDICAL MODE — adaptive markdown text
+        # ──────────────────────────────────────────────
 
         # 1. RAG Retrieval: Get relevant past context
         rag_chunks = rag_service.retrieve_relevant_memory(session_id, user_message_text, top_k=settings.MAX_RAG_CONTEXT_TURNS)
@@ -300,7 +438,7 @@ class OpenRouterService:
         # 2. Save current user message to RAG memory
         rag_service.add_to_memory(session_id, "user", user_message_text)
 
-        # 3. Build system prompt
+        # 3. Build adaptive system prompt (replaces old JSON-schema prompt)
         system_prompt = build_system_prompt(rag_chunks, is_clinical_mode)
 
         # Build LLM messages array
@@ -315,71 +453,31 @@ class OpenRouterService:
                     
         messages.append({"role": "user", "content": user_message_text})
 
-        current_settings = get_settings()
-        
-        candidate_models = []
-        if requested_model:
-            candidate_models.append(requested_model)
-        if current_settings.OPENROUTER_PRIMARY_MODEL and current_settings.OPENROUTER_PRIMARY_MODEL not in candidate_models:
-            candidate_models.append(current_settings.OPENROUTER_PRIMARY_MODEL)
-        for fallback in current_settings.fallback_models_list:
-            if fallback not in candidate_models:
-                candidate_models.append(fallback)
-
-        api_key = current_settings.OPENROUTER_API_KEY.strip()
-        has_valid_key = api_key and api_key != "your_openrouter_api_key_here"
-        api_url = f"{current_settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
-
-        structured_data: Optional[StructuredData] = None
-        model_used: str = "fallback-rules-engine"
+        reply_text: Optional[str] = None
+        model_used: str = "fallback"
 
         if has_valid_key:
-            referer = current_settings.FRONTEND_URL if current_settings.FRONTEND_URL else "https://openrouter.ai"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": referer,
-                "X-Title": "IRIS Health Assistant",
-                "Content-Type": "application/json"
-            }
+            raw_content, used_model = await self._call_llm(
+                messages, api_key, api_url, candidate_models, referer, temperature=0.4
+            )
+            if raw_content:
+                reply_text = raw_content.strip()
+                model_used = used_model
 
-            async with httpx.AsyncClient(timeout=45.0) as client:
-                for model_name in candidate_models:
-                    try:
-                        print(f"[OpenRouter Service] Sending prompt to model: {model_name} via {api_url}...")
-                        payload = {
-                            "model": model_name,
-                            "messages": messages,
-                            "temperature": 0.2
-                        }
-                        
-                        response = await client.post(api_url, headers=headers, json=payload)
-                        if response.status_code == 200:
-                            res_json = response.json()
-                            if "choices" in res_json and len(res_json["choices"]) > 0:
-                                raw_content = res_json["choices"][0]["message"]["content"]
-                                structured_data = self._parse_structured_data(raw_content, user_message_text, is_clinical_mode)
-                                model_used = model_name
-                                print(f"[OpenRouter Service] Successfully received LLM response from '{model_name}'.")
-                                break
-                        else:
-                            print(f"[OpenRouter Service] Model '{model_name}' returned status {response.status_code}: {response.text}")
-                    except Exception as e:
-                        print(f"[OpenRouter Service] Exception calling OpenRouter model '{model_name}': {e}")
-                        continue
-
-        if not structured_data:
+        if not reply_text:
             reason_msg = "API Key not set in .env" if not has_valid_key else "OpenRouter free models temporarily busy"
-            print(f"[OpenRouter Service] Using fallback rule engine ({reason_msg}).")
-            structured_data = self._build_fallback_structured_data(user_message_text, is_clinical_mode, reason=reason_msg)
+            print(f"[OpenRouter Service] Using fallback text ({reason_msg}).")
+            reply_text = self._build_fallback_text(user_message_text, has_valid_key)
 
-        # 4. Store assistant response summary in RAG memory for future recall
-        rag_service.add_to_memory(session_id, "assistant", structured_data.summary)
+        # 4. Store assistant response in RAG memory for future recall
+        rag_service.add_to_memory(session_id, "assistant", reply_text)
 
         return ChatResponse(
             id=f"msg-{int(time.time()*1000)}",
             sender="assistant",
             timestamp=time.strftime("%I:%M %p"),
-            structuredData=structured_data,
+            text=reply_text,
+            responseType="medical",
             ragContextUsed=rag_chunks,
             modelUsed=model_used
         )

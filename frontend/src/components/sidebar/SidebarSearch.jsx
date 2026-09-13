@@ -35,8 +35,8 @@ export default function SidebarSearch({ chats = [], onSelectChat }) {
       {/* Search Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`p-2 rounded-lg text-mist-300 hover:text-mist-100 hover:bg-ink-700 transition-colors ${
-          isOpen ? 'bg-ink-700 text-frosted-500' : ''
+        className={`p-2 rounded-lg text-mist-300 dark:text-[#82A8D2] hover:text-mist-100 dark:hover:text-white hover:bg-ink-700 dark:hover:bg-[#16273c] transition-colors ${
+          isOpen ? 'bg-ink-700 dark:bg-[#16273c] text-frosted-500 dark:text-[#38bdf8]' : ''
         }`}
         aria-label="Search past conversations"
       >
@@ -45,22 +45,22 @@ export default function SidebarSearch({ chats = [], onSelectChat }) {
 
       {/* Inline Popover / Search Panel */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-72 bg-ink-800 border border-ink-500 rounded-xl shadow-2xl z-50 p-2.5 animate-fadeIn">
+        <div className="absolute left-0 top-full mt-1.5 w-72 bg-ink-800 dark:bg-[#0c1622] border border-ink-500 dark:border-[#1e344d] rounded-xl shadow-2xl z-50 p-2.5 animate-fadeIn">
           {/* Input Header */}
           <div className="relative flex items-center mb-2">
-            <Search className="w-4 h-4 text-mist-300 absolute left-2.5 stroke-[1.5]" />
+            <Search className="w-4 h-4 text-mist-300 dark:text-[#82A8D2] absolute left-2.5 stroke-[1.5]" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full pl-8 pr-7 py-1.5 bg-ink-900 border border-ink-500 focus:border-frosted-500 rounded-lg text-xs text-mist-100 placeholder:text-mist-300 focus:outline-none transition-colors"
+              className="w-full pl-8 pr-7 py-1.5 bg-ink-900 dark:bg-[#0a1420] border border-ink-500 dark:border-[#1e344d] focus:border-frosted-500 dark:focus:border-[#38bdf8] rounded-lg text-xs text-mist-100 dark:text-[#F1F7FB] placeholder:text-mist-300 dark:placeholder:text-slate-400 focus:outline-none transition-colors"
             />
             {query && (
               <button
                 onClick={() => setQuery('')}
-                className="absolute right-2 text-mist-300 hover:text-mist-100 p-0.5"
+                className="absolute right-2 text-mist-300 dark:text-[#82A8D2] hover:text-mist-100 dark:hover:text-white p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -77,21 +77,21 @@ export default function SidebarSearch({ chats = [], onSelectChat }) {
                     onSelectChat(chat.id);
                     setIsOpen(false);
                   }}
-                  className="w-full p-2 text-left rounded-lg hover:bg-ink-700 transition-colors group flex items-start justify-between gap-2"
+                  className="w-full p-2 text-left rounded-lg hover:bg-ink-700 dark:hover:bg-[#16273c] transition-colors group flex items-start justify-between gap-2"
                 >
                   <div className="min-w-0">
-                    <div className="text-xs font-medium text-mist-100 group-hover:text-frosted-500 truncate">
+                    <div className="text-xs font-medium text-mist-100 dark:text-[#EAF6F7] group-hover:text-frosted-500 dark:group-hover:text-[#38bdf8] truncate">
                       {chat.title}
                     </div>
-                    <div className="text-[11px] text-mist-300 truncate">
+                    <div className="text-[11px] text-mist-300 dark:text-[#82A8D2] truncate">
                       {chat.lastMessagePreview}
                     </div>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-mist-300 group-hover:text-frosted-500 shrink-0 mt-0.5" />
+                  <ChevronRight className="w-3.5 h-3.5 text-mist-300 dark:text-[#82A8D2] group-hover:text-frosted-500 dark:group-hover:text-[#38bdf8] shrink-0 mt-0.5" />
                 </button>
               ))
             ) : (
-              <div className="py-6 text-center text-xs text-mist-300">
+              <div className="py-6 text-center text-xs text-mist-300 dark:text-slate-400">
                 <MessageSquare className="w-6 h-6 mx-auto mb-1.5 opacity-40 stroke-[1.5]" />
                 No conversations found
               </div>

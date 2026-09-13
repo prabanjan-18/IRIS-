@@ -1,26 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TopBar from '../components/chat/TopBar';
 import EmptyState from '../components/chat/EmptyState';
-import StructuredHealthCard from '../components/chat/StructuredHealthCard';
+import AdaptiveMessageRenderer from '../components/chat/AdaptiveMessageRenderer';
+import NearbyHospitalsCard from '../components/chat/NearbyHospitalsCard';
 import ThinkingIndicator from '../components/chat/ThinkingIndicator';
 import MessageComposer from '../components/chat/MessageComposer';
 import DisclaimerBar from '../components/shared/DisclaimerBar';
 import SymptomChips from '../components/chat/SymptomChips';
 import { sendMessageToBackend } from '../services/sendMessageToBackend';
+import { getUserCoordinates } from '../services/nearbyHospitalsService';
 
 export default function ChatPage({
   activeChat,
   messages,
   setMessages,
   onOpenMobileSidebar,
-  onNewChat
+  onNewChat,
+  isThinking: propIsThinking,
+  setIsThinking: propSetIsThinking
 }) {
   const [isClinicalMode, setIsClinicalMode] = useState(false);
   const [isThinkingMode, setIsThinkingMode] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
+  const [localIsThinking, setLocalIsThinking] = useState(false);
+  const isThinking = propIsThinking !== undefined ? propIsThinking : localIsThinking;
+  const setIsThinking = propSetIsThinking || setLocalIsThinking;
   const [selectedModel, setSelectedModel] = useState('openrouter/free');
   const [inputText, setInputText] = useState('');
+  const [cachedLocation, setCachedLocation] = useState(null);
   const messagesEndRef = useRef(null);
+
+  // Attempt to cache browser coordinates silently if user grants access
+  useEffect(() => {
+    getUserCoordinates()
+      .then((coords) => {
+        if (coords && coords.lat && coords.lng) {
+          setCachedLocation({ lat: coords.lat, lng: coords.lng });
+        }
+      })
+      .catch(() => {
+        // Ignored; location lookup falls back cleanly to city text extraction
+      });
+  }, []);
 
   // Auto scroll to bottom when new message arrives
   const scrollToBottom = () => {
@@ -49,9 +69,16 @@ export default function ChatPage({
     setIsThinking(true);
 
     try {
-      // Call service backend API with selectedModel and session ID
+      // Call service backend API with selectedModel, session ID, and cached location
       const currentSessionId = activeChat?.id || "iris-default-session";
-      const assistantMsg = await sendMessageToBackend(text, updatedMessages, isClinicalMode, selectedModel, currentSessionId);
+      const assistantMsg = await sendMessageToBackend(
+        text,
+        updatedMessages,
+        isClinicalMode,
+        selectedModel,
+        currentSessionId,
+        cachedLocation
+      );
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (error) {
       console.error("Error generating response:", error);
@@ -67,7 +94,14 @@ export default function ChatPage({
     setIsThinking(true);
     try {
       const currentSessionId = activeChat?.id || "iris-default-session";
-      const assistantMsg = await sendMessageToBackend(lastUserMsg.text, messages, isClinicalMode, selectedModel, currentSessionId);
+      const assistantMsg = await sendMessageToBackend(
+        lastUserMsg.text,
+        messages,
+        isClinicalMode,
+        selectedModel,
+        currentSessionId,
+        cachedLocation
+      );
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (error) {
       console.error("Error regenerating response:", error);
@@ -86,6 +120,7 @@ export default function ChatPage({
       {/* Top Header Bar */}
       <TopBar
         onOpenMobileSidebar={onOpenMobileSidebar}
+        isThinking={isThinking}
       />
 
       {/* Main Scrollable Canvas */}
@@ -102,11 +137,11 @@ export default function ChatPage({
             
             {/* Active Chat Title Badge Header */}
             {activeChat && (
-              <div className="text-center py-2 border-b border-frosted-300/40 mb-6">
-                <h2 className="font-display text-sm font-bold text-sapphire-900">
+              <div className="text-center py-2 border-b border-frosted-300/40 dark:border-[#1e3854]/40 mb-6">
+                <h2 className="font-display text-sm font-bold text-sapphire-900 dark:text-[#F1F7FB]">
                   {activeChat.title}
                 </h2>
-                <span className="text-[10px] text-sapphire-600 font-mono font-semibold">
+                <span className="text-[10px] text-sapphire-600 dark:text-slate-300 font-mono font-medium">
                   {activeChat.date || "Active Session"}
                 </span>
               </div>
@@ -117,9 +152,9 @@ export default function ChatPage({
               if (msg.sender === "user") {
                 return (
                   <div key={msg.id} className="flex justify-end my-4 animate-fadeIn">
-                    <div className="max-w-xl bg-white/95 text-sapphire-950 border border-frosted-300 rounded-2xl rounded-tr-xs px-4 py-3 text-sm md:text-base leading-relaxed shadow-soft font-sans backdrop-blur-sm">
+                    <div className="max-w-xl bg-white/95 dark:bg-[#14263b]/95 text-sapphire-950 dark:text-[#F1F7FB] border border-frosted-300 dark:border-[#223d5d] rounded-2xl rounded-tr-xs px-4 py-3 text-sm md:text-base leading-relaxed shadow-soft font-sans backdrop-blur-sm">
                       <p className="whitespace-pre-wrap font-medium">{msg.text}</p>
-                      <div className="text-[10px] text-sapphire-500 text-right mt-1.5 font-mono font-medium">
+                      <div className="text-[10px] text-sapphire-500 dark:text-slate-300 text-right mt-1.5 font-mono font-medium">
                         {msg.timestamp}
                       </div>
                     </div>
@@ -127,8 +162,19 @@ export default function ChatPage({
                 );
               }
 
+              // Route to NearbyHospitalsCard for hospital/location queries
+              if (msg.responseType === "location_request") {
+                return (
+                  <NearbyHospitalsCard
+                    key={msg.id}
+                    message={msg}
+                  />
+                );
+              }
+
+              // All other assistant messages (medical + conversation) → AdaptiveMessageRenderer
               return (
-                <StructuredHealthCard
+                <AdaptiveMessageRenderer
                   key={msg.id}
                   message={msg}
                   onRegenerate={() => handleRegenerate(msg.id)}

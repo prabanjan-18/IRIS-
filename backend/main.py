@@ -5,9 +5,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from models.schemas import ChatRequest, ChatResponse, HealthStatus, ModelInfo
+from models.schemas import ChatRequest, ChatResponse, HealthStatus, ModelInfo, NearbyHospitalsResponse
 from services.openrouter_service import openrouter_service
 from services.rag_service import rag_service
+from services.location_service import location_service
 
 app = FastAPI(
     title="IRIS Health & Clinical AI API",
@@ -73,7 +74,8 @@ async def chat_endpoint(request: ChatRequest):
             conversation_history=history_list,
             is_clinical_mode=request.isClinicalMode or False,
             session_id=request.sessionId or "default-session",
-            requested_model=request.model
+            requested_model=request.model,
+            user_location=request.userLocation
         )
         return response
     except Exception as e:
@@ -89,6 +91,14 @@ async def get_session_memory(session_id: str = Path(..., description="Session id
 async def clear_session_memory(session_id: str = Path(..., description="Session identifier")):
     success = rag_service.clear_memory(session_id)
     return {"sessionId": session_id, "cleared": success}
+
+@app.get("/api/nearby-hospitals", response_model=NearbyHospitalsResponse)
+async def nearby_hospitals_endpoint(lat: float, lng: float, radius: int = 10000):
+    try:
+        return await location_service.get_nearby_hospitals(lat=lat, lng=lng, radius_meters=radius)
+    except Exception as e:
+        print(f"[API Error] Failed to fetch nearby hospitals: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

@@ -46,6 +46,7 @@ function MainAppLayout() {
     return initialChats[0]?.id || `chat-${Date.now()}`;
   });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
 
   // Sync to localStorage
   React.useEffect(() => {
@@ -173,7 +174,7 @@ function MainAppLayout() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-ink-900 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-transparent font-sans">
       
       {/* Global Sidebar Shell */}
       <Sidebar
@@ -185,6 +186,7 @@ function MainAppLayout() {
         onDeleteChat={handleDeleteChat}
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
+        isThinking={isThinking}
       />
 
       {/* Main App Routes View */}
@@ -199,6 +201,8 @@ function MainAppLayout() {
                 setMessages={setMessagesForActiveChat}
                 onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
                 onNewChat={handleNewChat}
+                isThinking={isThinking}
+                setIsThinking={setIsThinking}
               />
             }
           />

@@ -55,7 +55,14 @@ export async function fetchAvailableModels() {
   return DEFAULT_FREE_MODELS;
 }
 
-export async function sendMessageToBackend(userMessageText, conversationHistory = [], isClinicalMode = false, selectedModel = null, sessionId = "iris-default-session") {
+export async function sendMessageToBackend(
+  userMessageText,
+  conversationHistory = [],
+  isClinicalMode = false,
+  selectedModel = null,
+  sessionId = "iris-default-session",
+  userLocation = null
+) {
   const BACKEND_URL = `${API_BASE_URL}/api/chat`;
 
   try {
@@ -76,7 +83,8 @@ export async function sendMessageToBackend(userMessageText, conversationHistory 
         conversationHistory: formattedHistory,
         isClinicalMode: isClinicalMode,
         sessionId: sessionId || "iris-default-session",
-        model: selectedModel || undefined
+        model: selectedModel || undefined,
+        userLocation: userLocation || undefined
       })
     });
 
@@ -94,6 +102,7 @@ export async function sendMessageToBackend(userMessageText, conversationHistory 
     id: `msg-${Date.now()}`,
     sender: "assistant",
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    responseType: "medical",
     structuredData: {
       triageLevel: "self",
       triageLabel: "Backend Server Unreachable",

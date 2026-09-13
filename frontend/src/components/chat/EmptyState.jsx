@@ -28,10 +28,10 @@ export default function EmptyState({ onSelectSuggestion, onSelectSymptom }) {
     <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full px-4 py-8 animate-fadeIn text-center">
       
       {/* Editorial Serif Hero Title */}
-      <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-sapphire-900 tracking-tight leading-tight mb-3">
+      <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-sapphire-900 dark:text-[#F1F7FB] tracking-tight leading-tight mb-3">
         What's going on with your health today?
       </h1>
-      <p className="text-sm md:text-base text-sapphire-700 font-sans max-w-lg mb-8 leading-relaxed font-medium">
+      <p className="text-sm md:text-base text-sapphire-700 dark:text-[#94A3B8] font-sans max-w-lg mb-8 leading-relaxed font-medium">
         Iris provides instant structured symptom analysis, medication explanations, and clinical triage recommendations.
       </p>
 
@@ -48,17 +48,17 @@ export default function EmptyState({ onSelectSuggestion, onSelectSymptom }) {
             <button
               key={idx}
               onClick={() => onSelectSuggestion(card.prompt)}
-              className="p-4 rounded-2xl bg-white/90 hover:bg-white border border-frosted-300/60 hover:border-sapphire-400 transition-all group shadow-soft flex flex-col justify-between"
+              className="p-4 rounded-2xl bg-white/90 hover:bg-white dark:bg-[#0d1b2a]/85 dark:hover:bg-[#13253a] border border-frosted-300/60 dark:border-[#1e3854]/70 hover:border-sapphire-400 dark:hover:border-[#38bdf8] transition-all group shadow-soft flex flex-col justify-between"
             >
-              <div className="w-9 h-9 rounded-xl bg-frosted-100 border border-frosted-300/60 flex items-center justify-center text-sapphire-800 mb-3 group-hover:scale-110 transition-transform">
+              <div className="w-9 h-9 rounded-xl bg-frosted-100 dark:bg-[#16273c] border border-frosted-300/60 dark:border-[#223d5d] flex items-center justify-center text-sapphire-800 dark:text-[#38bdf8] mb-3 group-hover:scale-110 transition-transform">
                 <Icon className="w-5 h-5 stroke-[1.5]" />
               </div>
 
               <div>
-                <h3 className="font-display text-sm font-bold text-sapphire-900 group-hover:text-sapphire-600 transition-colors mb-1">
+                <h3 className="font-display text-sm font-bold text-sapphire-900 dark:text-[#F1F7FB] group-hover:text-sapphire-600 dark:group-hover:text-[#38bdf8] transition-colors mb-1">
                   {card.title}
                 </h3>
-                <p className="text-xs text-sapphire-700 font-sans leading-normal">
+                <p className="text-xs text-sapphire-700 dark:text-[#94A3B8] font-sans leading-normal">
                   {card.subtitle}
                 </p>
               </div>
