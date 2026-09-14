@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     MODEL_MINIMAX_M2_7: str = "minimax/minimax-m2.7:free"
     MODEL_NEMOTRON_NANO: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     MODEL_LING_3_0: str = "inclusionai/ling-3.0-flash-fin:free"
+    MODEL_LING_3_0_VL: str = "inclusionai/ling-3.0-flash-vl:free"
     MODEL_DOTS_3: str = "dots-studio/dots-3-note-preview:free"
 
     HOST: str = "0.0.0.0"
@@ -53,12 +54,31 @@ class Settings(BaseSettings):
             self.MODEL_MINIMAX_M2_7,
             self.MODEL_NEMOTRON_NANO,
             self.MODEL_LING_3_0,
+            self.MODEL_LING_3_0_VL,
             self.MODEL_DOTS_3
         ]
         # Return unique models list maintaining order
         seen = set()
         res = []
         for m in models:
+            if m and m not in seen:
+                seen.add(m)
+                res.append(m)
+        return res
+
+    @property
+    def vision_models_list(self) -> List[str]:
+        # Priority order of free vision-capable multimodal models
+        vision_candidates = [
+            self.MODEL_LING_3_0_VL,
+            self.MODEL_DOTS_3,
+            self.MODEL_NEMOTRON_NANO,
+            self.MODEL_GEMMA_4_31B,
+            self.MODEL_GEMMA_4_26B
+        ]
+        seen = set()
+        res = []
+        for m in vision_candidates:
             if m and m not in seen:
                 seen.add(m)
                 res.append(m)

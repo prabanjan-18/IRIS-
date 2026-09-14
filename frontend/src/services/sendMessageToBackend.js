@@ -34,6 +34,7 @@ export const DEFAULT_FREE_MODELS = [
   { id: "minimax/minimax-m2.7:free", name: "MiniMax M2.7", isFree: true },
   { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nemotron 3 Nano Omni", isFree: true },
   { id: "inclusionai/ling-3.0-flash-fin:free", name: "Ling 3.0 Flash Fin", isFree: true },
+  { id: "inclusionai/ling-3.0-flash-vl:free", name: "Ling 3.0 Flash Vision (Multimodal)", isFree: true },
   { id: "dots-studio/dots-3-note-preview:free", name: "Dots 3 Note Preview", isFree: true }
 ];
 
@@ -80,7 +81,8 @@ export async function sendMessageToBackend(
   selectedModel = null,
   sessionId = "iris-default-session",
   userLocation = null,
-  document = null
+  document = null,
+  image = null
 ) {
   const BACKEND_URL = `${API_BASE_URL}/api/chat`;
 
@@ -104,7 +106,8 @@ export async function sendMessageToBackend(
         sessionId: sessionId || "iris-default-session",
         model: selectedModel || undefined,
         userLocation: userLocation || undefined,
-        document: document || undefined
+        document: document || undefined,
+        image: image || undefined
       })
     });
 

@@ -92,11 +92,13 @@ async def parse_document_endpoint(file: UploadFile = File(...)):
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     user_text = (request.userMessageText or "").strip()
-    if not user_text and not request.document:
-        raise HTTPException(status_code=400, detail="Either userMessageText or document must be provided")
+    if not user_text and not request.document and not request.image:
+        raise HTTPException(status_code=400, detail="Either userMessageText, document, or image must be provided")
     
     if not user_text and request.document:
         user_text = f"Please review and analyze this attached medical report ({request.document.filename}). Summarize key findings, test parameters, and explain any abnormal values."
+    elif not user_text and request.image:
+        user_text = f"Please carefully review and analyze this uploaded image/screenshot ({request.image.filename}). Describe your observations, clinical interpretations, and recommendations."
         
     try:
         history_list = []
@@ -110,7 +112,8 @@ async def chat_endpoint(request: ChatRequest):
             session_id=request.sessionId or "default-session",
             requested_model=request.model,
             user_location=request.userLocation,
-            document=request.document
+            document=request.document,
+            image=request.image
         )
         return response
     except Exception as e:

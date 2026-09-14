@@ -94,6 +94,41 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
     }
   };
 
+  const processImageFile = (file) => {
+    if (!file) return;
+    setIsAttachMenuOpen(false);
+    setDocError(null);
+
+    // Validate size (e.g. limit to 15MB for fast transmission)
+    if (file.size > 15 * 1024 * 1024) {
+      setDocError("Image file exceeds 15MB. Please choose a smaller image or screenshot.");
+      setTimeout(() => setDocError(null), 5000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result;
+      if (dataUrl) {
+        setAttachment({
+          name: file.name || `screenshot_${Date.now()}.png`,
+          size: (file.size / 1024).toFixed(1) + ' KB',
+          type: 'Medical Image',
+          fileType: file.type || 'image/png',
+          icon: Image,
+          isImage: true,
+          dataUrl: dataUrl
+        });
+      }
+    };
+    reader.onerror = (err) => {
+      console.error("Failed to read image file:", err);
+      setDocError("Could not read image file. Please try again.");
+      setTimeout(() => setDocError(null), 5000);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -109,20 +144,34 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
     setIsDragOver(false);
     const file = e.dataTransfer?.files?.[0];
     if (file) {
-      processDocumentFile(file);
+      if (file.type && file.type.startsWith('image/')) {
+        processImageFile(file);
+      } else {
+        processDocumentFile(file);
+      }
+    }
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            processImageFile(file);
+            return;
+          }
+        }
+      }
     }
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      setAttachment({
-        name: file.name,
-        size: (file.size / 1024).toFixed(1) + ' KB',
-        type: 'Medical Image',
-        icon: Image
-      });
-      setIsAttachMenuOpen(false);
+      processImageFile(file);
       if (imageInputRef.current) imageInputRef.current.value = '';
     }
   };
@@ -130,13 +179,7 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
   const handleCameraChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      setAttachment({
-        name: file.name || 'camera_photo.jpg',
-        size: (file.size / 1024).toFixed(1) + ' KB',
-        type: 'Camera Photo',
-        icon: Camera
-      });
-      setIsAttachMenuOpen(false);
+      processImageFile(file);
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
@@ -169,25 +212,38 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
         </div>
       )}
 
-      {/* File Attachment Pill */}
+      {/* File or Image Attachment Preview Pill */}
       {attachment && !isParsingDoc && (
-        <div className="mb-2 inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] text-xs text-sapphire-900 dark:text-[#EAF6F7] shadow-soft animate-fadeIn">
-          <AttachmentIcon className="w-4 h-4 text-sapphire-600 dark:text-[#38bdf8] shrink-0" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-sapphire-100 dark:bg-[#16273c] text-sapphire-900 dark:text-[#38bdf8] font-mono font-bold uppercase">
-              {attachment.detectedReportType || attachment.type}
-            </span>
-            <span className="font-semibold truncate max-w-xs">{attachment.name}</span>
-            <span className="text-[10px] text-sapphire-500 dark:text-[#82A8D2] font-mono">
-              ({attachment.size}{attachment.pageCount ? ` • ${attachment.pageCount} pg` : ''})
+        <div className="mb-2 inline-flex items-center gap-3 px-3 py-2 rounded-2xl bg-white dark:bg-[#0c1622] border border-frosted-300 dark:border-[#1e344d] text-xs text-sapphire-900 dark:text-[#EAF6F7] shadow-card-glow animate-fadeIn">
+          {attachment.dataUrl ? (
+            <div className="relative w-10 h-10 rounded-xl overflow-hidden border border-frosted-300 dark:border-[#223d5d] shrink-0 bg-slate-100 dark:bg-slate-900 flex items-center justify-center shadow-xs">
+              <img src={attachment.dataUrl} alt="Preview thumbnail" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-sapphire-100 dark:bg-[#16273c] text-sapphire-800 dark:text-[#38bdf8] flex items-center justify-center shrink-0">
+              <AttachmentIcon className="w-4 h-4" />
+            </div>
+          )}
+          <div className="flex flex-col min-w-0 pr-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-sapphire-100 dark:bg-[#16273c] text-sapphire-900 dark:text-[#38bdf8] font-mono font-bold uppercase tracking-wider">
+                {attachment.isImage ? "Image / Screenshot" : (attachment.detectedReportType || attachment.type)}
+              </span>
+              <span className="text-[10px] text-sapphire-500 dark:text-[#82A8D2] font-mono">
+                {attachment.size}{attachment.pageCount ? ` • ${attachment.pageCount} pg` : ''}
+              </span>
+            </div>
+            <span className="font-semibold text-xs text-sapphire-900 dark:text-[#F1F7FB] truncate max-w-xs md:max-w-sm mt-0.5">
+              {attachment.name}
             </span>
           </div>
           <button 
+            type="button"
             onClick={() => setAttachment(null)}
-            className="text-sapphire-500 dark:text-[#82A8D2] hover:text-sapphire-900 dark:hover:text-white ml-1 p-0.5 rounded-full hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors"
+            className="text-sapphire-500 dark:text-[#82A8D2] hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded-full hover:bg-frosted-100 dark:hover:bg-[#16273c] transition-colors ml-1"
             title="Remove attachment"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -309,7 +365,8 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe your symptoms or ask a health question..."
+            onPaste={handlePaste}
+            placeholder={attachment?.isImage ? "Add questions about this screenshot/image (optional)..." : "Describe symptoms, ask questions, or paste a screenshot..."}
             className="flex-1 bg-transparent text-sapphire-900 dark:text-[#F1F7FB] placeholder:text-sapphire-400 dark:placeholder:text-slate-400 font-medium text-sm md:text-base focus:outline-none resize-none py-1.5 px-1 max-h-44 scrollbar-thin"
           />
         </div>

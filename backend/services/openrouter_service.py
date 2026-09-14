@@ -3,13 +3,14 @@ import time
 import httpx
 from typing import Dict, Any, List, Optional
 from config import get_settings, settings
-from models.schemas import ChatResponse, HospitalResult, DocumentAttachment
+from models.schemas import ChatResponse, HospitalResult, DocumentAttachment, ImageAttachment
 from utils.prompts import (
     build_system_prompt,
     build_conversational_prompt,
     build_classifier_prompt,
     build_hospital_intro_prompt,
-    build_document_analysis_prompt
+    build_document_analysis_prompt,
+    build_image_analysis_prompt
 )
 from services.rag_service import rag_service
 from services.location_service import location_service
@@ -267,7 +268,8 @@ class OpenRouterService:
         session_id: str = "default-session",
         requested_model: Optional[str] = None,
         user_location: Optional[Dict[str, float]] = None,
-        document: Optional[DocumentAttachment] = None
+        document: Optional[DocumentAttachment] = None,
+        image: Optional[ImageAttachment] = None
     ) -> ChatResponse:
         
         current_settings = get_settings()
@@ -362,6 +364,103 @@ class OpenRouterService:
                 ragContextUsed=rag_chunks,
                 modelUsed="fallback-document-parser",
                 document=document
+            )
+
+        # ──────────────────────────────────────────────
+        # STEP 0b: IMAGE / SCREENSHOT ANALYSIS MODE
+        # ──────────────────────────────────────────────
+        if image and image.dataUrl and image.dataUrl.strip():
+            print(f"[OpenRouter Service] Processing image / screenshot analysis for: '{image.filename}' ({image.fileType})")
+            
+            # Prioritize vision-capable models
+            vision_candidates = []
+            if requested_model:
+                vision_candidates.append(requested_model)
+            for vm in current_settings.vision_models_list:
+                if vm not in vision_candidates:
+                    vision_candidates.append(vm)
+            for m in candidate_models:
+                if m not in vision_candidates:
+                    vision_candidates.append(m)
+
+            user_query = user_message_text.strip() if user_message_text and user_message_text.strip() else "Please thoroughly inspect and analyze this uploaded image or screenshot. Detail your observations, clinical findings, and recommendations."
+
+            rag_chunks = rag_service.retrieve_relevant_memory(
+                session_id,
+                f"Medical image screenshot {image.filename} {user_query}",
+                top_k=settings.MAX_RAG_CONTEXT_TURNS
+            )
+            rag_service.add_to_memory(
+                session_id,
+                "user",
+                f"[Uploaded Image: {image.filename}]: {user_query}"
+            )
+
+            system_prompt = build_image_analysis_prompt(
+                filename=image.filename,
+                image_type=image.fileType or "Medical Image / Screenshot",
+                rag_chunks=rag_chunks,
+                is_clinical_mode=is_clinical_mode
+            )
+
+            messages = [{"role": "system", "content": system_prompt}]
+            if conversation_history:
+                for turn in conversation_history[-4:]:
+                    role = turn.get("role", "user")
+                    content = turn.get("content", "")
+                    if content and role in ["user", "assistant"] and isinstance(content, str):
+                        messages.append({"role": role, "content": content})
+
+            # Multimodal user message containing text and image_url
+            multimodal_user_content = [
+                {"type": "text", "text": user_query},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image.dataUrl
+                    }
+                }
+            ]
+            messages.append({"role": "user", "content": multimodal_user_content})
+
+            if has_valid_key:
+                raw_content, model_used = await self._call_llm(
+                    messages, api_key, api_url, vision_candidates, referer, temperature=0.2
+                )
+                if raw_content:
+                    reply_text = raw_content.strip()
+                    rag_service.add_to_memory(session_id, "assistant", reply_text[:600])
+                    return ChatResponse(
+                        id=f"msg-{int(time.time()*1000)}",
+                        sender="assistant",
+                        timestamp=time.strftime("%I:%M %p"),
+                        text=reply_text,
+                        reply=reply_text,
+                        responseType="image_analysis",
+                        ragContextUsed=rag_chunks,
+                        modelUsed=model_used,
+                        image=image
+                    )
+
+            # Fallback if API key missing or LLM call fails
+            fallback_text = (
+                f"### Image Analysis: {image.filename}\n\n"
+                f"**File:** {image.filename} ({image.fileType or 'Image'})\n\n"
+                "I received your uploaded image/screenshot. To enable live multimodal AI image analysis, visual inspection, "
+                "and clinical differential reporting, please ensure a valid OpenRouter API key is configured in `backend/.env`.\n\n"
+                "⚠️ *Digital photos and screenshots should always be reviewed directly with a licensed physician or specialist for diagnostic accuracy.*"
+            )
+            rag_service.add_to_memory(session_id, "assistant", fallback_text[:500])
+            return ChatResponse(
+                id=f"msg-{int(time.time()*1000)}",
+                sender="assistant",
+                timestamp=time.strftime("%I:%M %p"),
+                text=fallback_text,
+                reply=fallback_text,
+                responseType="image_analysis",
+                ragContextUsed=rag_chunks,
+                modelUsed="fallback-image-analyzer",
+                image=image
             )
 
         # ──────────────────────────────────────────────
