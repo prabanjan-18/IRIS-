@@ -23,6 +23,7 @@
  */
 
 export const DEFAULT_FREE_MODELS = [
+  { id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", isFree: true },
   { id: "openrouter/free", name: "Auto Router (Recommended)", isFree: true },
   { id: "minimax/minimax-m3:free", name: "MiniMax M3", isFree: true },
   { id: "nvidia/nemotron-3.5-lightning:free", name: "Nemotron 3.5 Lightning", isFree: true },
@@ -61,17 +62,37 @@ export async function parseDocumentFile(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(PARSE_URL, {
-    method: 'POST',
-    body: formData
-  });
-
-  if (!response.ok) {
-    const errJson = await response.json().catch(() => ({ detail: 'Failed to parse document' }));
-    throw new Error(errJson.detail || `Server returned ${response.status}`);
+  const token = localStorage.getItem('iris_auth_token');
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  return await response.json();
+  try {
+    const response = await fetch(PARSE_URL, {
+      method: 'POST',
+      headers: headers,
+      body: formData
+    });
+
+    if (response.status === 401) {
+      console.warn("[Backend API] 401 Unauthorized in document parsing");
+      localStorage.removeItem('iris_auth_token');
+      window.dispatchEvent(new CustomEvent('iris_session_expired'));
+    }
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({ detail: 'Failed to parse document' }));
+      throw new Error(errJson.detail || `Server returned ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message?.includes('fetch')) {
+      throw new Error(`Unable to connect to backend server at ${API_BASE_URL}. Please ensure the backend is running.`);
+    }
+    throw err;
+  }
 }
 
 export async function sendMessageToBackend(
@@ -94,11 +115,17 @@ export async function sendMessageToBackend(
         }))
       : [];
 
+    const token = localStorage.getItem('iris_auth_token');
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await fetch(BACKEND_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: headers,
       body: JSON.stringify({
         userMessageText: userMessageText,
         conversationHistory: formattedHistory,
@@ -110,6 +137,12 @@ export async function sendMessageToBackend(
         image: image || undefined
       })
     });
+
+    if (response.status === 401) {
+      console.warn("[Backend API] 401 Unauthorized — clearing expired session");
+      localStorage.removeItem('iris_auth_token');
+      window.dispatchEvent(new CustomEvent('iris_session_expired'));
+    }
 
     if (response.ok) {
       const data = await response.json();

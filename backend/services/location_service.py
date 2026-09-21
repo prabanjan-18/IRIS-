@@ -466,5 +466,178 @@ out center 15;"""
             )
         ]
 
+    async def search_places_nearby(
+        self,
+        lat: float,
+        lng: float,
+        query: str = "hospital",
+        specialty: Optional[str] = None,
+        radius: int = 5000,
+        limit: int = 5,
+        is_emergency: bool = False
+    ) -> List[HospitalResult]:
+        """
+        Search for hospitals/clinics near coordinates using Google Places or OSM fallback.
+        For emergency: sort by distance, use 3km initial radius, expand to 8km if < 3 results.
+        For disease-specific: sort by rating DESC then distance.
+        """
+        results: List[HospitalResult] = []
+
+        # Emergency uses smaller initial radius
+        if is_emergency and radius == 5000:
+            radius = 3000
+
+        # 1. Try Google Places Nearby Search
+        if self.google_api_key and self.google_api_key != "your_google_maps_api_key_here":
+            try:
+                url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+                params = {
+                    "location": f"{lat},{lng}",
+                    "radius": radius,
+                    "type": "hospital",
+                    "keyword": query,
+                    "key": self.google_api_key
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get(url, params=params)
+                    if res.status_code == 200:
+                        data = res.json().get("results", [])
+                        for p in data[:limit]:
+                            p_lat = p.get("geometry", {}).get("location", {}).get("lat")
+                            p_lng = p.get("geometry", {}).get("location", {}).get("lng")
+                            place_id = p.get("place_id")
+                            dist = calculate_distance(lat, lng, p_lat, p_lng) if p_lat and p_lng else None
+                            dist_text = f"{dist:.1f} km away" if dist is not None else None
+                            p_name = p.get("name", "Hospital")
+                            p_addr = p.get("vicinity") or p.get("formatted_address") or "Medical Facility"
+                            results.append(HospitalResult(
+                                name=p_name,
+                                address=p_addr,
+                                specialty=specialty or self._extract_specialty(query),
+                                distanceText=dist_text,
+                                rating=p.get("rating"),
+                                lat=p_lat,
+                                lng=p_lng,
+                                placeId=place_id,
+                                mapsUrl=self._make_maps_url(p_name, p_addr, place_id)
+                            ))
+
+                # Auto-expand for emergency if < 3 results
+                if is_emergency and len(results) < 3 and radius < 8000:
+                    expanded = await self.search_places_nearby(
+                        lat, lng, query, specialty, radius=8000, limit=limit, is_emergency=False
+                    )
+                    # Merge, deduplicate by name
+                    seen_names = {r.name for r in results}
+                    for r in expanded:
+                        if r.name not in seen_names:
+                            results.append(r)
+                            seen_names.add(r.name)
+
+                if results:
+                    if is_emergency:
+                        # Sort by distance (closest first)
+                        results.sort(key=lambda h: (h.distanceText is None, float(h.distanceText.split()[0]) if h.distanceText else 999))
+                    else:
+                        # Sort by rating DESC, then distance
+                        results.sort(key=lambda h: (-(h.rating or 0), float(h.distanceText.split()[0]) if h.distanceText else 999))
+                    return results[:limit]
+            except Exception as e:
+                print(f"[LocationService] Google Places nearby search failed: {e}")
+
+        # 2. OSM Overpass fallback
+        try:
+            osm_results = await self._search_osm(lat, lng, radius)
+            if osm_results:
+                for h in osm_results[:limit]:
+                    dist_text = f"{h.distanceKm:.1f} km away" if h.distanceKm is not None else None
+                    results.append(HospitalResult(
+                        name=h.name,
+                        address=h.address,
+                        specialty=specialty or self._extract_specialty(query),
+                        distanceText=dist_text,
+                        rating=h.rating,
+                        lat=h.lat,
+                        lng=h.lng,
+                        mapsUrl=h.googleMapsUrl
+                    ))
+                if is_emergency:
+                    results.sort(key=lambda h: (h.distanceText is None, float(h.distanceText.split()[0]) if h.distanceText else 999))
+                else:
+                    results.sort(key=lambda h: (-(h.rating or 0), float(h.distanceText.split()[0]) if h.distanceText else 999))
+                return results[:limit]
+        except Exception as e:
+            print(f"[LocationService] OSM fallback for places nearby failed: {e}")
+
+        # 3. Google Maps search link fallback
+        search_query = urllib.parse.quote(f"{query} near me")
+        results.append(HospitalResult(
+            name=f"Search: {query.title()}",
+            address="Open Google Maps to find facilities near you",
+            specialty=specialty or "Hospital",
+            mapsUrl=f"https://www.google.com/maps/search/{search_query}/@{lat},{lng},14z"
+        ))
+        return results
+
+    async def search_places_by_text(
+        self,
+        area_text: str,
+        query: str = "hospital",
+        specialty: Optional[str] = None,
+        limit: int = 5
+    ) -> List[HospitalResult]:
+        """Search hospitals by text location (city/area name) when no coordinates available."""
+        results: List[HospitalResult] = []
+        full_query = f"{query} in {area_text}"
+
+        # 1. Try Google Places Text Search
+        if self.google_api_key and self.google_api_key != "your_google_maps_api_key_here":
+            try:
+                url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+                params = {"query": full_query, "type": "hospital", "key": self.google_api_key}
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get(url, params=params)
+                    if res.status_code == 200:
+                        data = res.json().get("results", [])
+                        for p in data[:limit]:
+                            p_lat = p.get("geometry", {}).get("location", {}).get("lat")
+                            p_lng = p.get("geometry", {}).get("location", {}).get("lng")
+                            place_id = p.get("place_id")
+                            results.append(HospitalResult(
+                                name=p.get("name", "Hospital"),
+                                address=p.get("formatted_address") or p.get("vicinity") or area_text,
+                                specialty=specialty or self._extract_specialty(query),
+                                rating=p.get("rating"),
+                                lat=p_lat,
+                                lng=p_lng,
+                                placeId=place_id,
+                                mapsUrl=self._make_maps_url(p.get("name", "Hospital"), "", place_id)
+                            ))
+                        if results:
+                            results.sort(key=lambda h: -(h.rating or 0))
+                            return results[:limit]
+            except Exception as e:
+                print(f"[LocationService] Google Text Search failed: {e}")
+
+        # 2. Nominatim fallback
+        try:
+            geo = await self.geocode_location(area_text)
+            if geo:
+                lat, lng, _ = geo
+                return await self.search_places_nearby(lat, lng, query, specialty, radius=10000, limit=limit)
+        except Exception as e:
+            print(f"[LocationService] Nominatim text fallback failed: {e}")
+
+        # 3. Direct Maps link fallback
+        encoded = urllib.parse.quote(full_query)
+        results.append(HospitalResult(
+            name=f"Search: {query.title()} in {area_text}",
+            address="Open Google Maps to find facilities",
+            specialty=specialty or "Hospital",
+            mapsUrl=f"https://www.google.com/maps/search/{encoded}"
+        ))
+        return results
+
 location_service = LocationService()
+
 

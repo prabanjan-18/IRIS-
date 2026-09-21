@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, 
   SlidersHorizontal, 
-  User, 
+  User as UserIcon, 
   Settings, 
   HelpCircle, 
   LogOut, 
@@ -10,21 +11,19 @@ import {
   ShieldCheck,
   Check,
   Sun,
-  Moon
+  Moon,
+  LogIn
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 export default function UserProfile({ isCollapsed = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const menuRef = useRef(null);
+  const navigate = useNavigate();
   const { theme, toggleTheme, isDark } = useTheme();
-
-  const user = {
-    name: "Sean",
-    email: "abc@gmail.com",
-    initials: "SN"
-  };
+  const { user, logout } = useAuth();
 
   // Close popup menu on click outside
   useEffect(() => {
@@ -37,9 +36,19 @@ export default function UserProfile({ isCollapsed = false }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const showToast = (message) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSignOut = () => {
+    logout();
+    setIsOpen(false);
+    navigate('/login');
+  };
+
   const handleAction = (label) => {
-    setToastMessage(`Selected: ${label}`);
-    setTimeout(() => setToastMessage(null), 2000);
+    showToast(`Selected: ${label}`);
     setIsOpen(false);
   };
 
@@ -47,49 +56,74 @@ export default function UserProfile({ isCollapsed = false }) {
     if (e) e.stopPropagation();
     toggleTheme();
     const nextMode = !isDark ? 'Dark Mode' : 'Light Mode';
-    setToastMessage(`Switched to ${nextMode}`);
-    setTimeout(() => setToastMessage(null), 2000);
+    showToast(`Switched to ${nextMode}`);
   };
+
+  const getInitials = (name, email) => {
+    if (name) {
+      const parts = name.trim().split(' ');
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+      }
+      return name.slice(0, 2).toUpperCase();
+    }
+    if (email) {
+      return email.slice(0, 2).toUpperCase();
+    }
+    return "U";
+  };
+
+  const displayName = user?.name || user?.email?.split('@')[0] || "User";
+  const userEmail = user?.email || "";
+  const avatarUrl = user?.picture || null;
+  const initials = getInitials(user?.name, user?.email);
 
   return (
     <div className="relative w-full" ref={menuRef}>
       
-      {/* Action Toast Notification */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-16 left-6 z-50 px-3.5 py-2 bg-sapphire-900 dark:bg-[#0c1622] text-white dark:text-[#F1F7FB] text-xs font-semibold rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn border border-sapphire-700 dark:border-[#1e3854]">
-          <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+        <div className="fixed bottom-16 left-6 z-50 px-3.5 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 animate-fadeIn border text-xs font-semibold bg-sapphire-900 dark:bg-[#0c1622] text-white dark:text-[#F1F7FB] border-sapphire-700 dark:border-[#1e3854]">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Floating Popover Menu (Appears above Profile Button when clicked) */}
-      {isOpen && (
+      {/* Popover Menu (Visible when user profile is clicked) */}
+      {isOpen && user && (
         <div className={`absolute bottom-full mb-2 ${isCollapsed ? 'left-0 w-64' : 'left-0 right-0 w-64 md:w-68'} bg-white/98 dark:bg-[#0c1622]/98 border border-frosted-300 dark:border-[#1e344d] shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-xl animate-fadeIn text-sapphire-900 dark:text-[#EAF6F7]`}>
           
-          {/* TOP SECTION: User Account Info */}
-          <button
-            onClick={() => handleAction('Account Details')}
-            className="w-full p-2.5 rounded-xl hover:bg-frosted-100/70 dark:hover:bg-[#16273c] transition-colors flex items-center justify-between group text-left"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-full bg-sapphire-800 dark:bg-[#254E7A] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-soft">
-                {user.initials}
+          {/* Account Details Header */}
+          <div className="p-2.5 rounded-xl bg-frosted-100/50 dark:bg-[#132337]/50 border border-frosted-200 dark:border-[#1e3854] flex items-center gap-3">
+            {avatarUrl ? (
+              <img 
+                src={avatarUrl} 
+                alt={displayName} 
+                className="w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-emerald-400/40 shadow-soft" 
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sapphire-800 to-frosted-600 dark:from-[#1b3a5c] dark:to-[#2563EB] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-soft">
+                {initials}
               </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB] truncate">
-                  {user.name}
-                </div>
-                <div className="text-[11px] text-sapphire-600 dark:text-slate-300 font-mono font-medium truncate">
-                  {user.email}
-                </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB] truncate">
+                  {displayName}
+                </span>
+              </div>
+              <div className="text-[11px] text-[#8CA3A8] font-mono truncate">
+                {userEmail}
+              </div>
+              <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/40">
+                <ShieldCheck className="w-2.5 h-2.5" /> Authenticated
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-sapphire-400 dark:text-[#5B8ABF] group-hover:text-sapphire-900 dark:group-hover:text-white transition-colors shrink-0 stroke-[1.8]" />
-          </button>
+          </div>
 
           <div className="my-1.5 border-b border-frosted-200/80 dark:border-[#1e344d]" />
 
-          {/* THEME TOGGLE OPTION */}
+          {/* Theme Toggle */}
           <div 
             onClick={handleToggleTheme}
             className="w-full px-3 py-2 rounded-xl flex items-center justify-between hover:bg-frosted-100/70 dark:hover:bg-[#16273c] transition-colors group cursor-pointer select-none"
@@ -111,7 +145,6 @@ export default function UserProfile({ isCollapsed = false }) {
               </div>
             </div>
 
-            {/* Tactile Pill Toggle Switch */}
             <div
               role="switch"
               aria-checked={isDark}
@@ -135,124 +168,116 @@ export default function UserProfile({ isCollapsed = false }) {
 
           <div className="my-1.5 border-b border-frosted-200/80 dark:border-[#1e344d]" />
 
-          {/* MIDDLE SECTION: Primary Settings & Features */}
+          {/* Quick Actions */}
           <div className="space-y-0.5">
-            
-            {/* Upgrade Plan */}
             <button
-              onClick={() => handleAction('Upgrade plan')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group"
+              onClick={() => handleAction('Clinical Profile')}
+              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
-              <span>Upgrade plan</span>
+              <UserIcon className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
+              <span>Clinical Profile</span>
             </button>
 
-            {/* Personalization */}
-            <button
-              onClick={() => handleAction('Personalization')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
-              <span>Personalization</span>
-            </button>
-
-            {/* Profile */}
-            <button
-              onClick={() => handleAction('Profile')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group"
-            >
-              <User className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
-              <span>Profile</span>
-            </button>
-
-            {/* Settings */}
             <button
               onClick={() => handleAction('Settings')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group"
+              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-3 hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group cursor-pointer"
             >
               <Settings className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
               <span>Settings</span>
             </button>
-
           </div>
 
           <div className="my-1.5 border-b border-frosted-200/80 dark:border-[#1e344d]" />
 
-          {/* BOTTOM SECTION: Help & Logout */}
+          {/* Sign Out Button */}
           <div className="space-y-0.5">
-            
-            {/* Help */}
             <button
-              onClick={() => handleAction('Help')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between hover:bg-frosted-100/70 dark:hover:bg-[#16273c] text-sapphire-900 dark:text-[#EAF6F7] transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <HelpCircle className="w-4 h-4 text-sapphire-700 dark:text-[#5B8ABF] group-hover:scale-110 transition-transform stroke-[1.8]" />
-                <span>Help</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-sapphire-400 dark:text-[#5B8ABF] group-hover:text-sapphire-900 dark:group-hover:text-white transition-colors stroke-[1.8]" />
-            </button>
-
-            {/* Log out */}
-            <button
-              onClick={() => handleAction('Log out')}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between hover:bg-red-50 dark:hover:bg-red-950/30 text-red-700 dark:text-red-400 transition-colors group"
+              onClick={handleSignOut}
+              className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between hover:bg-red-50 dark:hover:bg-red-950/30 text-red-700 dark:text-red-400 transition-colors group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <LogOut className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:scale-110 transition-transform stroke-[1.8]" />
-                <span>Log out</span>
+                <span>Sign out</span>
               </div>
               <ChevronRight className="w-4 h-4 text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300 transition-colors stroke-[1.8]" />
             </button>
-
           </div>
 
         </div>
       )}
 
-      {/* Main Bottom User Profile Trigger Button */}
-      {isCollapsed ? (
-        <div className="p-2 flex justify-center border-t border-frosted-300/40 dark:border-[#1e344d]/60">
+      {/* Main Profile Trigger Button in Sidebar Footer */}
+      {user ? (
+        isCollapsed ? (
+          <div className="p-2 flex justify-center border-t border-frosted-300/40 dark:border-[#1e344d]/60">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="relative w-9 h-9 rounded-full shadow-soft hover:scale-105 transition-all cursor-pointer"
+              title={`${displayName} (${userEmail})`}
+              aria-label="User Profile Menu"
+            >
+              {avatarUrl ? (
+                <img 
+                  src={avatarUrl} 
+                  alt={displayName} 
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-400/40" 
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-sapphire-800 dark:bg-[#254E7A] text-white text-xs font-bold flex items-center justify-center">
+                  {initials}
+                </div>
+              )}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0a1420]" />
+            </button>
+          </div>
+        ) : (
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="w-9 h-9 rounded-full bg-sapphire-800 dark:bg-[#254E7A] text-white text-xs font-bold flex items-center justify-center shadow-soft hover:scale-105 transition-all"
-            title={`${user.name} (${user.email})`}
+            className={`w-full p-2.5 border-t border-frosted-300/40 dark:border-[#1e344d]/60 flex items-center justify-between rounded-xl transition-all text-left shadow-soft cursor-pointer ${
+              isOpen 
+                ? 'bg-white dark:bg-[#132337] border-sapphire-400 dark:border-[#38bdf8] ring-2 ring-sapphire-200 dark:ring-[#1e3a5f]' 
+                : 'bg-white/80 hover:bg-white dark:bg-[#0e1b2b]/80 dark:hover:bg-[#14263b] border-frosted-300 dark:border-[#1e3854]'
+            }`}
             aria-label="User Profile Menu"
+            aria-expanded={isOpen}
           >
-            {user.initials}
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              {avatarUrl ? (
+                <img 
+                  src={avatarUrl} 
+                  alt={displayName} 
+                  className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-frosted-300 dark:ring-[#1e3854] shadow-soft" 
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-sapphire-800 dark:bg-[#254E7A] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-soft font-sans">
+                  {initials}
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB] truncate font-sans">
+                    {displayName}
+                  </span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                </div>
+                <p className="text-[11px] text-[#8CA3A8] font-mono font-medium truncate">
+                  {userEmail}
+                </p>
+              </div>
+            </div>
+          </button>
+        )
+      ) : (
+        <div className="p-2 border-t border-frosted-300/40 dark:border-[#1e344d]/60">
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full p-2.5 rounded-xl bg-white/80 hover:bg-white dark:bg-[#0e1b2b] dark:hover:bg-[#14263b] border border-frosted-300 dark:border-[#1e3854] flex items-center justify-center gap-2 text-xs font-semibold text-sapphire-900 dark:text-[#F1F7FB] shadow-soft cursor-pointer"
+          >
+            <LogIn className="w-4 h-4 text-frosted-700 dark:text-[#38bdf8]" />
+            {!isCollapsed && <span>Sign in to Iris</span>}
           </button>
         </div>
-      ) : (
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className={`w-full p-2.5 border-t border-frosted-300/40 dark:border-[#1e344d]/60 flex items-center justify-between rounded-xl transition-all text-left shadow-soft ${
-            isOpen 
-              ? 'bg-white dark:bg-[#132337] border-sapphire-400 dark:border-[#38bdf8] ring-2 ring-sapphire-200 dark:ring-[#1e3a5f]' 
-              : 'bg-white/80 hover:bg-white dark:bg-[#0e1b2b]/80 dark:hover:bg-[#14263b] border-frosted-300 dark:border-[#1e3854]'
-          }`}
-          aria-label="User Profile Menu"
-          aria-expanded={isOpen}
-        >
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            {/* User Avatar Circle */}
-            <div className="w-9 h-9 rounded-full bg-sapphire-800 dark:bg-[#254E7A] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-soft font-sans">
-              {user.initials}
-            </div>
-
-            {/* User Info */}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-sapphire-900 dark:text-[#F1F7FB] truncate font-sans">
-                  {user.name}
-                </span>
-                <ShieldCheck className="w-3.5 h-3.5 text-sapphire-600 dark:text-[#38bdf8] shrink-0" />
-              </div>
-              <p className="text-[11px] text-sapphire-600 dark:text-slate-300 font-mono font-medium truncate">
-                {user.email}
-              </p>
-            </div>
-          </div>
-        </button>
       )}
 
     </div>

@@ -1,5 +1,6 @@
 import re
 import time
+import asyncio
 import httpx
 from typing import Dict, Any, List, Optional
 from config import get_settings, settings
@@ -144,6 +145,12 @@ class OpenRouterService:
         # Both signals present or neither — ambiguous, need LLM classifier
         return None
 
+    def _is_gemini_model(self, model_name: Optional[str]) -> bool:
+        if not model_name:
+            return False
+        name = model_name.lower()
+        return "gemini-3.8" in name or name in ["gemini-3.8-flash", "google/gemini-3.8-flash"]
+
     async def _classify_intent_llm(self, user_text: str, api_key: str, api_url: str, model: str, referer: str) -> str:
         """Use LLM to classify ambiguous messages.
         Returns 'direct_location', 'hospital_recommendation', 'location', 'medical', or 'chat'."""
@@ -153,22 +160,36 @@ class OpenRouterService:
             {"role": "user", "content": classifier_prompt}
         ]
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": referer,
-            "X-Title": "IRIS Health Assistant",
-            "Content-Type": "application/json"
-        }
+        current_settings = get_settings()
+        gemini_api_key = current_settings.GEMINI_API_KEY.strip()
+        is_gemini = self._is_gemini_model(model) or (not api_key and gemini_api_key)
+
+        if is_gemini and gemini_api_key:
+            target_url = f"{current_settings.GEMINI_BASE_URL.rstrip('/')}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {gemini_api_key}",
+                "Content-Type": "application/json"
+            }
+            target_model = "gemini-3.1-flash-lite"
+        else:
+            target_url = api_url
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": referer,
+                "X-Title": "IRIS Health Assistant",
+                "Content-Type": "application/json"
+            }
+            target_model = model
         
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 payload = {
-                    "model": model,
+                    "model": target_model,
                     "messages": messages,
                     "temperature": 0.0,
                     "max_tokens": 10
                 }
-                response = await client.post(api_url, headers=headers, json=payload)
+                response = await client.post(target_url, headers=headers, json=payload)
                 if response.status_code == 200:
                     res_json = response.json()
                     if "choices" in res_json and len(res_json["choices"]) > 0:
@@ -193,15 +214,14 @@ class OpenRouterService:
         return "medical"
 
     def _build_fallback_text(self, user_text: str, has_valid_key: bool) -> str:
-        """Return a prose fallback when OpenRouter is unavailable."""
+        """Return a prose fallback when AI models are unavailable."""
         if not has_valid_key:
             return (
                 "⚠️ **API Key Required**\n\n"
-                "To get live AI responses from Iris, please add your OpenRouter API key to `backend/.env`:\n\n"
-                "1. Visit [openrouter.ai/keys](https://openrouter.ai/keys) to create a free key\n"
-                "2. Copy your key (starts with `sk-or-v1-...`)\n"
-                "3. Paste it as `OPENROUTER_API_KEY=...` in `c:\\IRIS\\backend\\.env`\n"
-                "4. Restart the backend server\n"
+                "To get live AI responses from Iris, please add your Gemini or OpenRouter API key to `backend/.env`:\n\n"
+                "1. Add your Google Gemini API key as `GEMINI_API_KEY=...` in `c:\\IRIS\\backend\\.env`\n"
+                "2. Or add your OpenRouter API key as `OPENROUTER_API_KEY=...`\n"
+                "3. Restart the backend server\n"
             )
         text_lower = user_text.lower()
         if any(kw in text_lower for kw in ["chest pain", "heart attack", "stroke", "short of breath", "can't breathe", "unconscious"]):
@@ -217,45 +237,152 @@ class OpenRouterService:
         )
 
     def _placeholder_removed_json_pipeline(self):
-        # Removed: _clean_json_string, _parse_structured_data,
-        # _build_raw_llm_structured_data, _build_fallback_structured_data
-        # Medical responses now return adaptive Markdown text directly.
+        # Medical responses return adaptive Markdown text directly.
         pass
 
-
-
     async def _call_llm(self, messages: list, api_key: str, api_url: str, candidate_models: list, referer: str, temperature: float = 0.2, max_tokens: int = None) -> tuple:
-        """Call OpenRouter LLM with model fallback chain. Returns (raw_content, model_used) or (None, None)."""
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": referer,
-            "X-Title": "IRIS Health Assistant",
-            "Content-Type": "application/json"
-        }
+        """Call LLM with model fallback chain. Handles Google Gemini 3.8 Flash and OpenRouter models."""
+        current_settings = get_settings()
+        gemini_api_key = current_settings.GEMINI_API_KEY.strip()
+        gemini_endpoint = f"{current_settings.GEMINI_BASE_URL.rstrip('/')}/chat/completions"
+
+        gemini_flash_submodels = [
+            "gemini-3.1-flash-lite",
+            "gemini-3-flash-preview",
+            "gemini-flash-latest",
+            "gemini-2.5-flash-lite"
+        ]
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             for model_name in candidate_models:
                 try:
-                    print(f"[OpenRouter Service] Sending prompt to model: {model_name} via {api_url}...")
-                    payload = {
-                        "model": model_name,
-                        "messages": messages,
-                        "temperature": temperature
-                    }
-                    if max_tokens:
-                        payload["max_tokens"] = max_tokens
-                    
-                    response = await client.post(api_url, headers=headers, json=payload)
-                    if response.status_code == 200:
-                        res_json = response.json()
-                        if "choices" in res_json and len(res_json["choices"]) > 0:
-                            raw_content = res_json["choices"][0]["message"]["content"]
-                            print(f"[OpenRouter Service] Successfully received LLM response from '{model_name}'.")
-                            return raw_content, model_name
+                    is_gemini = self._is_gemini_model(model_name)
+                    if is_gemini:
+                        if not gemini_api_key or gemini_api_key == "your_gemini_api_key_here":
+                            print(f"[LLM Service] Gemini API key not configured, skipping {model_name}.")
+                            continue
+
+                        # Try available Gemini Flash models in order
+                        for submodel in gemini_flash_submodels:
+                            # 1. Try OpenAI-compatible endpoint
+                            try:
+                                target_headers = {
+                                    "Authorization": f"Bearer {gemini_api_key}",
+                                    "Content-Type": "application/json"
+                                }
+                                payload = {
+                                    "model": submodel,
+                                    "messages": messages,
+                                    "temperature": temperature
+                                }
+                                if max_tokens:
+                                    payload["max_tokens"] = max_tokens
+
+                                print(f"[LLM Service] Sending prompt to Google Gemini model '{submodel}' via {gemini_endpoint}...")
+                                response = await client.post(gemini_endpoint, headers=target_headers, json=payload)
+                                if response.status_code == 200:
+                                    res_json = response.json()
+                                    if "choices" in res_json and len(res_json["choices"]) > 0:
+                                        raw_content = res_json["choices"][0]["message"]["content"]
+                                        print(f"[LLM Service] Successfully received LLM response from Gemini '{submodel}'.")
+                                        return raw_content, "Gemini 3.8 Flash"
+                                elif response.status_code in [503, 404, 429]:
+                                    print(f"[LLM Service] Gemini submodel '{submodel}' unavailable ({response.status_code}), trying next submodel...")
+                                else:
+                                    print(f"[LLM Service] Gemini submodel '{submodel}' returned {response.status_code}: {response.text[:150]}")
+                            except Exception as ge:
+                                print(f"[LLM Service] OpenAI-proxy exception on {submodel}: {ge}")
+
+                            # 2. Try native generateContent endpoint
+                            try:
+                                native_url = f"https://generativelanguage.googleapis.com/v1beta/models/{submodel}:generateContent?key={gemini_api_key}"
+                                sys_parts = []
+                                gemini_contents = []
+                                for msg in messages:
+                                    role = msg.get("role")
+                                    content = msg.get("content")
+                                    if role == "system" and isinstance(content, str):
+                                        sys_parts.append({"text": content})
+                                    elif role in ["user", "assistant"]:
+                                        g_role = "user" if role == "user" else "model"
+                                        if isinstance(content, str):
+                                            gemini_contents.append({"role": g_role, "parts": [{"text": content}]})
+                                        elif isinstance(content, list):
+                                            c_parts = []
+                                            for p in content:
+                                                if p.get("type") == "text":
+                                                    c_parts.append({"text": p.get("text", "")})
+                                                elif p.get("type") == "image_url":
+                                                    img_url = p.get("image_url", {}).get("url", "")
+                                                    if "," in img_url:
+                                                        h, b64 = img_url.split(",", 1)
+                                                        mime = h.split(";")[0].replace("data:", "")
+                                                    else:
+                                                        mime, b64 = "image/jpeg", img_url
+                                                    c_parts.append({"inline_data": {"mime_type": mime, "data": b64}})
+                                            gemini_contents.append({"role": g_role, "parts": c_parts})
+
+                                native_payload = {
+                                    "contents": gemini_contents,
+                                    "generationConfig": {"temperature": temperature}
+                                }
+                                if sys_parts:
+                                    native_payload["system_instruction"] = {"parts": sys_parts}
+                                if max_tokens:
+                                    native_payload["generationConfig"]["maxOutputTokens"] = max_tokens
+
+                                n_resp = await client.post(native_url, json=native_payload, timeout=45.0)
+                                if n_resp.status_code == 200:
+                                    n_json = n_resp.json()
+                                    candidates = n_json.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        if parts and "text" in parts[0]:
+                                            native_text = parts[0]["text"]
+                                            print(f"[LLM Service] Successfully received LLM response from native Gemini '{submodel}'.")
+                                            return native_text, "Gemini 3.8 Flash"
+                            except Exception as ne:
+                                print(f"[LLM Service] Native Gemini exception on {submodel}: {ne}")
+
+                        # If all Gemini models failed, fall through to OpenRouter candidate models
+                        print("[LLM Service] All Gemini Flash endpoints exhausted, falling back to next candidate model...")
+                        continue
+
                     else:
-                        print(f"[OpenRouter Service] Model '{model_name}' returned status {response.status_code}: {response.text}")
+                        # OpenRouter model
+                        if not api_key or api_key == "your_openrouter_api_key_here":
+                            print(f"[LLM Service] OpenRouter API key not configured, skipping {model_name}.")
+                            continue
+                        target_url = api_url
+                        target_headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "HTTP-Referer": referer,
+                            "X-Title": "IRIS Health Assistant",
+                            "Content-Type": "application/json"
+                        }
+                        target_model = model_name
+                        print(f"[LLM Service] Sending prompt to OpenRouter model: {model_name} via {target_url}...")
+
+                        payload = {
+                            "model": target_model,
+                            "messages": messages,
+                            "temperature": temperature
+                        }
+                        if max_tokens:
+                            payload["max_tokens"] = max_tokens
+
+                        response = await client.post(target_url, headers=target_headers, json=payload)
+                        if response.status_code == 200:
+                            res_json = response.json()
+                            if "choices" in res_json and len(res_json["choices"]) > 0:
+                                raw_content = res_json["choices"][0]["message"]["content"]
+                                print(f"[LLM Service] Successfully received LLM response from '{model_name}'.")
+                                return raw_content, model_name
+                        else:
+                            print(f"[LLM Service] OpenRouter model '{model_name}' returned status {response.status_code}: {response.text[:150]}")
+
                 except Exception as e:
-                    print(f"[OpenRouter Service] Exception calling OpenRouter model '{model_name}': {e}")
+                    print(f"[LLM Service] Exception calling model '{model_name}': {e}")
                     continue
         
         return None, None
@@ -274,7 +401,11 @@ class OpenRouterService:
         
         current_settings = get_settings()
         api_key = current_settings.OPENROUTER_API_KEY.strip()
-        has_valid_key = api_key and api_key != "your_openrouter_api_key_here"
+        gemini_api_key = current_settings.GEMINI_API_KEY.strip()
+        has_valid_key = (
+            (bool(api_key) and api_key != "your_openrouter_api_key_here") or
+            (bool(gemini_api_key) and gemini_api_key != "your_gemini_api_key_here")
+        )
         api_url = f"{current_settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
         referer = current_settings.FRONTEND_URL if current_settings.FRONTEND_URL else "https://openrouter.ai"
 
@@ -282,6 +413,8 @@ class OpenRouterService:
         candidate_models = []
         if requested_model:
             candidate_models.append(requested_model)
+        if current_settings.MODEL_GEMINI_3_8_FLASH and current_settings.MODEL_GEMINI_3_8_FLASH not in candidate_models:
+            candidate_models.append(current_settings.MODEL_GEMINI_3_8_FLASH)
         if current_settings.OPENROUTER_PRIMARY_MODEL and current_settings.OPENROUTER_PRIMARY_MODEL not in candidate_models:
             candidate_models.append(current_settings.OPENROUTER_PRIMARY_MODEL)
         for fallback in current_settings.fallback_models_list:
@@ -324,8 +457,11 @@ class OpenRouterService:
             messages.append({"role": "user", "content": user_query})
 
             if has_valid_key:
+                doc_candidates = list(candidate_models)
+                if gemini_api_key and gemini_api_key != "your_gemini_api_key_here" and "google/gemini-3.8-flash" not in doc_candidates:
+                    doc_candidates.insert(0, "google/gemini-3.8-flash")
                 raw_content, model_used = await self._call_llm(
-                    messages, api_key, api_url, candidate_models, referer, temperature=0.2
+                    messages, api_key, api_url, doc_candidates, referer, temperature=0.2
                 )
                 if raw_content:
                     reply_text = raw_content.strip()
@@ -374,11 +510,13 @@ class OpenRouterService:
             
             # Prioritize vision-capable models
             vision_candidates = []
-            if requested_model:
-                vision_candidates.append(requested_model)
+            if self._is_gemini_model(requested_model) or (gemini_api_key and gemini_api_key != "your_gemini_api_key_here"):
+                vision_candidates.append("google/gemini-3.8-flash")
             for vm in current_settings.vision_models_list:
                 if vm not in vision_candidates:
                     vision_candidates.append(vm)
+            if requested_model and requested_model not in vision_candidates:
+                vision_candidates.append(requested_model)
             for m in candidate_models:
                 if m not in vision_candidates:
                     vision_candidates.append(m)

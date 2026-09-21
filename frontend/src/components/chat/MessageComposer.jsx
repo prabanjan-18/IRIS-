@@ -90,7 +90,12 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
   const handleDocChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      processDocumentFile(file);
+      const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
+      if (isImage) {
+        processImageFile(file);
+      } else {
+        processDocumentFile(file);
+      }
     }
   };
 
@@ -144,7 +149,8 @@ export default function MessageComposer({ onSendMessage, isThinkingMode, setIsTh
     setIsDragOver(false);
     const file = e.dataTransfer?.files?.[0];
     if (file) {
-      if (file.type && file.type.startsWith('image/')) {
+      const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
+      if (isImage) {
         processImageFile(file);
       } else {
         processDocumentFile(file);

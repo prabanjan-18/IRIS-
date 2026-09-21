@@ -15,7 +15,7 @@ import { ExternalLink, MapPin, Compass } from 'lucide-react';
  * - Thin hairline borders (border-frosted-200 dark:border-[#2A3B3F]).
  * - Real Google Maps deep links.
  */
-export default function HospitalResultsList({ hospitals = [] }) {
+export default function HospitalResultsList({ hospitals = [], userLocation = null, title = null }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
   if (!Array.isArray(hospitals) || hospitals.length === 0) {
@@ -27,8 +27,10 @@ export default function HospitalResultsList({ hospitals = [] }) {
     (h) => typeof h.lat === 'number' && !isNaN(h.lat) && typeof h.lng === 'number' && !isNaN(h.lng)
   );
 
-  // Mini-map is shown ONLY if there are at least 2 hospitals with valid coordinates
-  const showMiniMap = hospitals.length > 1 && validCoordinates.length >= 2;
+  const hasUserCoords = userLocation && typeof userLocation.lat === 'number' && typeof userLocation.lng === 'number';
+
+  // Mini-map is shown if there are at least 2 hospitals with valid coordinates OR 1 hospital + user coords
+  const showMiniMap = (hospitals.length > 1 && validCoordinates.length >= 2) || (validCoordinates.length >= 1 && hasUserCoords);
 
   // Max 5 pins plotted on the map
   const mapHospitals = validCoordinates.slice(0, 5);
@@ -36,9 +38,17 @@ export default function HospitalResultsList({ hospitals = [] }) {
 
   // Compute bounding box with padding for SVG map projection
   let pinPositions = [];
+  let userPinPosition = null;
+
   if (showMiniMap) {
     const lats = mapHospitals.map((h) => h.lat);
     const lngs = mapHospitals.map((h) => h.lng);
+
+    if (hasUserCoords) {
+      lats.push(userLocation.lat);
+      lngs.push(userLocation.lng);
+    }
+
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -59,6 +69,15 @@ export default function HospitalResultsList({ hospitals = [] }) {
     const svgHeight = 160;
     const marginX = 45;
     const marginY = 32;
+
+    if (hasUserCoords) {
+      const ux = marginX + ((userLocation.lng - bMinLng) / (bMaxLng - bMinLng)) * (svgWidth - marginX * 2);
+      const uy = svgHeight - marginY - ((userLocation.lat - bMinLat) / (bMaxLat - bMinLat)) * (svgHeight - marginY * 2);
+      userPinPosition = {
+        x: Math.max(20, Math.min(svgWidth - 20, ux)),
+        y: Math.max(20, Math.min(svgHeight - 20, uy)),
+      };
+    }
 
     pinPositions = mapHospitals.map((h, i) => {
       const x = marginX + ((h.lng - bMinLng) / (bMaxLng - bMinLng)) * (svgWidth - marginX * 2);
@@ -86,9 +105,22 @@ export default function HospitalResultsList({ hospitals = [] }) {
     ? `https://www.google.com/maps/search/hospitals/@${validCoordinates[0].lat},${validCoordinates[0].lng},13z`
     : `https://www.google.com/maps/search/?api=1&query=${broadSearchQuery}`;
 
+
   return (
     <div className="w-full max-w-[600px] mt-3.5 rounded-2xl border border-frosted-300/80 dark:border-[#1e3854] bg-white/95 dark:bg-[#0d1b2a]/95 shadow-soft overflow-hidden transition-all font-sans">
       
+      {title && (
+        <div className="px-4 py-2.5 bg-frosted-50/80 dark:bg-[#0c1825] border-b border-frosted-200 dark:border-[#1e3854] flex items-center justify-between">
+          <span className="text-xs font-semibold text-sapphire-900 dark:text-frosted-100 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
+            {title}
+          </span>
+          <span className="text-[11px] text-sapphire-500 dark:text-slate-400">
+            {hospitals.length} {hospitals.length === 1 ? 'facility' : 'facilities'} found
+          </span>
+        </div>
+      )}
+
       {/* ─── 1. MINI-MAP (Rendered only when >1 hospital with valid coordinates) ─── */}
       {showMiniMap && (
         <div className="relative w-full h-[160px] bg-slate-900 border-b border-frosted-200 dark:border-[#1e3854] overflow-hidden select-none">
@@ -163,6 +195,39 @@ export default function HospitalResultsList({ hospitals = [] }) {
                 strokeDasharray="4 4"
                 strokeOpacity="0.35"
               />
+            )}
+
+            {/* Search Radius & User Location Dot */}
+            {userPinPosition && (
+              <g transform={`translate(${userPinPosition.x}, ${userPinPosition.y})`}>
+                {/* Search Radius Circle */}
+                <circle
+                  r="42"
+                  fill="#38BDF8"
+                  fillOpacity="0.07"
+                  stroke="#38BDF8"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                  strokeOpacity="0.35"
+                />
+                {/* Pulsing Outer Ring */}
+                <circle r="14" fill="#38BDF8" fillOpacity="0.25" className="animate-ping" />
+                {/* User Dot */}
+                <circle r="6" fill="#0284C7" stroke="#FFFFFF" strokeWidth="2" />
+                <circle r="2.5" fill="#FFFFFF" />
+                {/* "You" Tag */}
+                <text
+                  x="0"
+                  y="15"
+                  textAnchor="middle"
+                  fill="#9FE2EE"
+                  fontSize="8"
+                  fontWeight="600"
+                  fontFamily="Inter, system-ui, sans-serif"
+                >
+                  YOU
+                </text>
+              </g>
             )}
 
             {/* Numbered Pins */}
@@ -277,9 +342,16 @@ export default function HospitalResultsList({ hospitals = [] }) {
                 <div className="min-w-0 flex-1">
                   
                   {/* Hospital Name (Inter 500) */}
-                  <h4 className="text-sm font-medium text-sapphire-950 dark:text-[#F1F7FB] truncate leading-tight">
-                    {hospital.name}
-                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-medium text-sapphire-950 dark:text-[#F1F7FB] truncate leading-tight">
+                      {hospital.name}
+                    </h4>
+                    {hospital.specialty && (
+                      <span className="px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-frosted-100 dark:bg-[#152e46] text-sapphire-700 dark:text-[#9FE2EE] border border-frosted-300/80 dark:border-[#224467]">
+                        {hospital.specialty}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Secondary line: specialty · distance · rating */}
                   {secondaryParts.length > 0 && (

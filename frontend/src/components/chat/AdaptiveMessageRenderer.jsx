@@ -8,10 +8,16 @@ import {
 import {
   AlertCircle, AlertTriangle, CheckCircle2,
   Copy, Check, RotateCcw, ThumbsUp, ThumbsDown,
-  BookOpen, ChevronDown, ChevronUp, ExternalLink
+  BookOpen, ChevronDown, ChevronUp, ExternalLink,
+  Table, ArrowRight, FileText
 } from 'lucide-react';
 import IrisLogo from '../shared/IrisLogo';
 import HospitalResultsList from './HospitalResultsList';
+import LocationPermissionCard from './LocationPermissionCard';
+import { useArtifact } from '../../context/ArtifactContext';
+import { parseArtifactFromText } from '../../utils/artifactParser';
+import { parseLocationFromText, stripLocationMarkers } from '../../utils/locationParser';
+
 
 // ─── Brand palette for recharts ───────────────────────────────────────────────
 const CHART_COLORS = ['#254E7A', '#3A6B9F', '#5B8ABF', '#15803D', '#B45309', '#C2410C', '#7E68B0'];
@@ -264,9 +270,32 @@ function SourcesDrawer({ ragContextUsed }) {
 export default function AdaptiveMessageRenderer({ message, onRegenerate }) {
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const { setActiveArtifact, openPanel } = useArtifact();
 
-  const rawText = message.text || message.structuredData?.summary || '';
-  const { level: triageLevel, cleanText } = useMemo(() => extractTriage(rawText), [rawText]);
+  const rawText = message.text || message.reply || message.structuredData?.summary || '';
+
+  // Parse location intent if present in message or rawText
+  const { locationIntent: parsedLocation, cleanText: textWithoutLocation } = useMemo(() => {
+    return parseLocationFromText(rawText);
+  }, [rawText]);
+
+  const activeLocationIntent = message.locationIntent || parsedLocation;
+
+  // Parse artifact if embedded in text
+  const { artifact: parsedArtifact, cleanText: textWithoutArtifact } = useMemo(() => {
+    return parseArtifactFromText(textWithoutLocation);
+  }, [textWithoutLocation]);
+
+  const activeMsgArtifact = message.artifact || parsedArtifact;
+
+  const { level: triageLevel, cleanText } = useMemo(() => {
+    const res = extractTriage(textWithoutArtifact);
+    // If emergency location marker detected, ensure triage is urgent
+    if (!res.level && activeLocationIntent?.isEmergency) {
+      res.level = 'urgent';
+    }
+    return res;
+  }, [textWithoutArtifact, activeLocationIntent]);
 
   const markdownComponents = useMemo(() => buildMarkdownComponents(onRegenerate), [onRegenerate]);
 
@@ -274,6 +303,13 @@ export default function AdaptiveMessageRenderer({ message, onRegenerate }) {
     navigator.clipboard.writeText(cleanText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleOpenArtifact = () => {
+    if (activeMsgArtifact) {
+      setActiveArtifact(activeMsgArtifact.id);
+      openPanel();
+    }
   };
 
   return (
@@ -301,13 +337,63 @@ export default function AdaptiveMessageRenderer({ message, onRegenerate }) {
             </ReactMarkdown>
           </div>
 
+          {/* Compact Inline Table Preview if an artifact table was generated */}
+          {activeMsgArtifact && activeMsgArtifact.type === 'table' && (
+            <div className="my-3.5 rounded-xl border border-frosted-300 dark:border-[#2A3B3F] bg-frosted-50/50 dark:bg-[#101A1D]/80 overflow-hidden shadow-xs">
+              <div className="px-3.5 py-2 bg-frosted-100 dark:bg-[#162326] border-b border-frosted-300 dark:border-[#2A3B3F] flex items-center justify-between text-xs">
+                <span className="font-semibold text-sapphire-900 dark:text-[#EAF6F7] flex items-center gap-1.5">
+                  <Table className="w-3.5 h-3.5 text-[#9FE2EE]" />
+                  {activeMsgArtifact.title}
+                </span>
+                <button
+                  onClick={handleOpenArtifact}
+                  className="text-[11px] font-medium text-sapphire-700 dark:text-[#9FE2EE] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>View full table</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="max-h-[200px] overflow-y-auto px-3.5 py-2 text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {activeMsgArtifact.markdown}
+                </ReactMarkdown>
+              </div>
+            </div>
+          )}
+
           {/* Connected Hospital Results: Mini-map + compact rows */}
-          {message.hospitals && message.hospitals.length > 0 && (
+          {message.hospitals && message.hospitals.length > 0 && !activeLocationIntent && (
             <HospitalResultsList hospitals={message.hospitals} />
           )}
 
+          {/* Inline Location Permission & Search Card */}
+          {activeLocationIntent && (
+            <LocationPermissionCard intent={activeLocationIntent} />
+          )}
+
+
           {/* Sources drawer — only if RAG context was actually retrieved */}
           <SourcesDrawer ragContextUsed={message.ragContextUsed} />
+
+          {/* Inline Artifact Chip (Report / Table / PDF) */}
+          {activeMsgArtifact && (
+            <div className="mt-3.5 pt-3 border-t border-frosted-200 dark:border-[#1e3854]/60">
+              <button
+                onClick={handleOpenArtifact}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#162326] hover:bg-[#1F3338] border border-[#2A3B3F] hover:border-[#9FE2EE]/50 text-xs text-[#9FE2EE] font-medium shadow-xs transition-all cursor-pointer group/chip"
+                title={`Open ${activeMsgArtifact.title} in side panel`}
+              >
+                <FileText className="w-3.5 h-3.5 text-[#9FE2EE] shrink-0" />
+                <span className="font-medium text-[#EAF6F7] truncate max-w-[220px]">
+                  {activeMsgArtifact.title}
+                </span>
+                <span className="text-[#8CA3A8] text-[11px] font-mono group-hover/chip:text-[#9FE2EE] flex items-center gap-0.5 ml-1">
+                  <span>View in panel</span>
+                  <ArrowRight className="w-3 h-3 transition-transform group-hover/chip:translate-x-0.5" />
+                </span>
+              </button>
+            </div>
+          )}
 
         </div>
 

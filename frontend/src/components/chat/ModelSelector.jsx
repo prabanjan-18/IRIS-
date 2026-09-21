@@ -33,7 +33,7 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const currentModelObj = models.find((m) => m.id === selectedModel) || models[0] || { name: 'Auto Router', id: 'openrouter/free' };
+  const currentModelObj = models.find((m) => m.id === selectedModel) || models[0] || { name: 'Gemini 3.8 Flash', id: 'google/gemini-3.8-flash' };
 
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
@@ -61,7 +61,7 @@ export default function ModelSelector({ selectedModel, setSelectedModel, dropUp 
               <Sparkles className="w-3.5 h-3.5 text-sapphire-600 dark:text-[#38bdf8]" />
               <span>Select LLM Model</span>
             </div>
-            <span className="text-[10px] text-sapphire-700 dark:text-[#82A8D2] font-mono font-medium">OpenRouter Models</span>
+            <span className="text-[10px] text-sapphire-700 dark:text-[#82A8D2] font-mono font-medium">Available Models</span>
           </div>
 
           <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">

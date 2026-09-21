@@ -89,3 +89,87 @@ export function getDirectionsUrl(name, address, lat, lng) {
   const query = encodeURIComponent(`${name} ${address || ''}`.trim());
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
+
+const LOCATION_CACHE_KEY = 'iris_user_location';
+const LOCATION_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
+export function getCachedCoordinates() {
+  try {
+    const raw = sessionStorage.getItem(LOCATION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > LOCATION_CACHE_EXPIRY) {
+      sessionStorage.removeItem(LOCATION_CACHE_KEY);
+      return null;
+    }
+    return parsed.coords;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setCachedCoordinates(coords) {
+  try {
+    sessionStorage.setItem(
+      LOCATION_CACHE_KEY,
+      JSON.stringify({ coords, timestamp: Date.now() })
+    );
+  } catch (e) {
+    // SessionStorage may fail in private mode or quota exceeded
+  }
+}
+
+export async function searchPlacesNearby({
+  lat = null,
+  lng = null,
+  query = 'hospital',
+  specialty = null,
+  radius = null,
+  limit = 5,
+  is_emergency = false,
+  area_text = null
+}) {
+  try {
+    const url = `${API_BASE_URL}/api/places/nearby`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat,
+        lng,
+        query,
+        specialty,
+        radius,
+        limit,
+        is_emergency,
+        area_text
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+    return await response.json();
+  } catch (err) {
+    console.warn('[NearbyHospitalsService] searchPlacesNearby failed, generating fallback:', err);
+    // Return basic structured fallback
+    return {
+      status: 'fallback',
+      count: 1,
+      source: 'client_fallback',
+      center: lat && lng ? { lat, lng } : null,
+      hospitals: [
+        {
+          name: query ? `${query.charAt(0).toUpperCase() + query.slice(1)} Near You` : 'Nearest Healthcare Facility',
+          address: area_text || 'Open map to view nearby options',
+          specialty: specialty || (is_emergency ? 'Emergency Care' : 'Hospital'),
+          mapsUrl: lat && lng
+            ? `https://www.google.com/maps/search/${encodeURIComponent(query || 'hospital')}/@${lat},${lng},14z`
+            : `https://www.google.com/maps/search/${encodeURIComponent((query || 'hospital') + ' ' + (area_text || ''))}`,
+          lat: lat,
+          lng: lng
+        }
+      ]
+    };
+  }
+}
+

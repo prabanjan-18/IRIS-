@@ -1,8 +1,11 @@
 import io
 import re
+import base64
 from typing import Dict, Any, Optional
 import pypdf
 import docx
+import httpx
+from config import get_settings
 
 class DocumentService:
     """Service to parse, extract, and structure text from medical lab documents, PDFs, and clinical reports."""
@@ -19,6 +22,9 @@ class DocumentService:
         if filename_lower.endswith(".pdf"):
             file_type = "PDF Medical Document"
             extracted_text, page_count = cls._extract_from_pdf(file_bytes)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff")):
+            file_type = "Medical Lab Image / Scan"
+            extracted_text, page_count = cls._extract_from_image_vision(file_bytes, filename)
         elif filename_lower.endswith(".docx"):
             file_type = "Word Document (DOCX)"
             extracted_text, page_count = cls._extract_from_docx(file_bytes)
@@ -91,6 +97,94 @@ class DocumentService:
 
         combined = "\n\n".join(pages_text)
         return combined, max(1, page_count)
+
+    @classmethod
+    def _extract_from_image_vision(cls, file_bytes: bytes, filename: str) -> tuple[str, int]:
+        current_settings = get_settings()
+        gemini_api_key = current_settings.GEMINI_API_KEY.strip()
+        or_key = current_settings.OPENROUTER_API_KEY.strip()
+
+        ext = filename.split(".")[-1].lower() if "." in filename else "png"
+        mime = f"image/{ext}" if ext in ["png", "jpeg", "webp", "gif"] else ("image/jpeg" if ext == "jpg" else "image/png")
+        b64_data = base64.b64encode(file_bytes).decode("utf-8")
+        data_uri = f"data:{mime};base64,{b64_data}"
+
+        # 1. Try Gemini Vision models first (fast, highly accurate medical OCR)
+        if gemini_api_key and gemini_api_key != "your_gemini_api_key_here":
+            for model_id in ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-flash-latest"]:
+                try:
+                    headers = {
+                        "Authorization": f"Bearer {gemini_api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    url = f"{current_settings.GEMINI_BASE_URL.rstrip('/')}/chat/completions"
+                    payload = {
+                        "model": model_id,
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "You are an expert clinical laboratory and medical OCR transcription assistant. "
+                                        "Transcribe all text, numbers, lab test parameters, observed patient values, "
+                                        "reference ranges, units, and diagnostic findings visible in this medical report image. "
+                                        "Structure laboratory test panels into a clear Markdown table with columns: "
+                                        "| Test Name | Observed Value | Reference Range | Units | Status |. "
+                                        "Include any patient demographics, collection dates, and physician notes if present."
+                                    )
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": data_uri}
+                                }
+                            ]
+                        }],
+                        "temperature": 0.1
+                    }
+                    with httpx.Client(timeout=30.0) as client:
+                        resp = client.post(url, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                            if content and len(content.strip()) > 10:
+                                print(f"[DocumentService] Successfully transcribed report image via {model_id}.")
+                                return content.strip(), 1
+                        else:
+                            print(f"[DocumentService] Vision OCR via {model_id} returned {resp.status_code}")
+                except Exception as e:
+                    print(f"[DocumentService] Vision OCR attempt with {model_id} failed: {e}")
+
+        # 2. Try OpenRouter Vision model fallback
+        if or_key and or_key != "your_openrouter_api_key_here":
+            try:
+                headers = {
+                    "Authorization": f"Bearer {or_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://iris.local",
+                    "X-Title": "IRIS Health OCR"
+                }
+                url = f"{current_settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+                payload = {
+                    "model": "inclusionai/ling-3.0-flash-vl:free",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extract all medical laboratory test names, values, units, and ranges from this image in a clear markdown table."},
+                            {"type": "image_url", "image_url": {"url": data_uri}}
+                        ]
+                    }]
+                }
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content and len(content.strip()) > 10:
+                            print("[DocumentService] Successfully transcribed report image via OpenRouter Vision.")
+                            return content.strip(), 1
+            except Exception as e:
+                print(f"[DocumentService] OpenRouter Vision OCR fallback failed: {e}")
+
+        return f"[Image Medical Report: {filename}] (Visual inspection and clinical interpretation will be conducted directly by the multimodal reasoning model).", 1
 
     @classmethod
     def _extract_from_docx(cls, file_bytes: bytes) -> tuple[str, int]:

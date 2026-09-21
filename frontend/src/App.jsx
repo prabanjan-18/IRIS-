@@ -3,6 +3,10 @@ import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-route
 import Sidebar from './components/sidebar/Sidebar';
 import ChatPage from './pages/ChatPage';
 import AllConversationsPage from './pages/AllConversationsPage';
+import LoginPage from './pages/LoginPage';
+import ProtectedRoute from './components/shared/ProtectedRoute';
+import { ArtifactProvider } from './context/ArtifactContext';
+import ArtifactPanel from './components/artifact/ArtifactPanel';
 
 function loadSavedChats() {
   try {
@@ -190,7 +194,7 @@ function MainAppLayout() {
       />
 
       {/* Main App Routes View */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <Routes>
           <Route
             path="/"
@@ -219,6 +223,9 @@ function MainAppLayout() {
         </Routes>
       </div>
 
+      {/* Column 3: Slide-out Clinical Artifact Panel */}
+      <ArtifactPanel />
+
     </div>
   );
 }
@@ -226,7 +233,19 @@ function MainAppLayout() {
 export default function App() {
   return (
     <Router>
-      <MainAppLayout />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <ArtifactProvider>
+                <MainAppLayout />
+              </ArtifactProvider>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </Router>
   );
 }

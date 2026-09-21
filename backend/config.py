@@ -8,6 +8,14 @@ class Settings(BaseSettings):
     OPENROUTER_PRIMARY_MODEL: str = "openrouter/free"
     GOOGLE_MAPS_API_KEY: str = ""
     
+    # Google Gemini Settings
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    MODEL_GEMINI_3_8_FLASH: str = "google/gemini-3.8-flash"
+    
+    # Google OAuth 2.0 Settings
+    GOOGLE_CLIENT_ID: str = ""
+    
     # Active Verified Free Models
     MODEL_OPENROUTER_FREE: str = "openrouter/free"
     MODEL_MINIMAX_M3: str = "minimax/minimax-m3:free"
@@ -42,6 +50,7 @@ class Settings(BaseSettings):
     @property
     def all_models_list(self) -> List[str]:
         models = [
+            self.MODEL_GEMINI_3_8_FLASH,
             self.OPENROUTER_PRIMARY_MODEL,
             self.MODEL_OPENROUTER_FREE,
             self.MODEL_MINIMAX_M3,
@@ -70,6 +79,7 @@ class Settings(BaseSettings):
     def vision_models_list(self) -> List[str]:
         # Priority order of free vision-capable multimodal models
         vision_candidates = [
+            self.MODEL_GEMINI_3_8_FLASH,
             self.MODEL_LING_3_0_VL,
             self.MODEL_DOTS_3,
             self.MODEL_NEMOTRON_NANO,

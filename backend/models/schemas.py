@@ -95,6 +95,7 @@ class ChatResponse(BaseModel):
 class HealthStatus(BaseModel):
     status: str
     openrouterKeyConfigured: bool
+    geminiKeyConfigured: Optional[bool] = False
     primaryModel: str
     fallbackModels: List[str]
     vectorDbStatus: str
@@ -125,3 +126,34 @@ class NearbyHospitalsResponse(BaseModel):
     userLat: float
     userLng: float
     hospitals: List[HospitalItem]
+
+class GoogleUser(BaseModel):
+    googleId: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+
+class VerifyTokenRequest(BaseModel):
+    token: str
+
+class VerifyTokenResponse(BaseModel):
+    user: GoogleUser
+
+class PlacesNearbyRequest(BaseModel):
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    query: Optional[str] = "hospital"
+    specialty: Optional[str] = None
+    radius: Optional[int] = None
+    limit: Optional[int] = 5
+    is_emergency: bool = False
+    area_text: Optional[str] = None
+
+class PlacesNearbyResponse(BaseModel):
+    status: str = "ok"
+    count: int = 0
+    hospitals: List[HospitalResult] = Field(default_factory=list)
+    source: str = "places_api"
+    center: Optional[Dict[str, float]] = None
+
+

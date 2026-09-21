@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Image as ImageIcon, Maximize2, X } from 'lucide-react';
+import { FileText, Image as ImageIcon, Maximize2, X, ChevronRight, ChevronLeft, FileSpreadsheet } from 'lucide-react';
 import TopBar from '../components/chat/TopBar';
 import EmptyState from '../components/chat/EmptyState';
 import AdaptiveMessageRenderer from '../components/chat/AdaptiveMessageRenderer';
@@ -10,6 +10,10 @@ import DisclaimerBar from '../components/shared/DisclaimerBar';
 import SymptomChips from '../components/chat/SymptomChips';
 import { sendMessageToBackend } from '../services/sendMessageToBackend';
 import { getUserCoordinates } from '../services/nearbyHospitalsService';
+import { useArtifact } from '../context/ArtifactContext';
+import { parseArtifactFromText } from '../utils/artifactParser';
+import { parseLocationFromText } from '../utils/locationParser';
+import { generatePDF } from '../utils/generatePDF';
 
 export default function ChatPage({
   activeChat,
@@ -25,11 +29,13 @@ export default function ChatPage({
   const [localIsThinking, setLocalIsThinking] = useState(false);
   const isThinking = propIsThinking !== undefined ? propIsThinking : localIsThinking;
   const setIsThinking = propSetIsThinking || setLocalIsThinking;
-  const [selectedModel, setSelectedModel] = useState('openrouter/free');
+  const [selectedModel, setSelectedModel] = useState('google/gemini-3.8-flash');
   const [inputText, setInputText] = useState('');
   const [cachedLocation, setCachedLocation] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
   const messagesEndRef = useRef(null);
+
+  const { artifacts, isPanelOpen, togglePanel, openPanel, addArtifact } = useArtifact();
 
   // Close lightbox on Escape key
   useEffect(() => {
@@ -123,6 +129,33 @@ export default function ChatPage({
         docPayload,
         imagePayload
       );
+
+      // Parse location intent markers
+      let rawText = assistantMsg.text || assistantMsg.reply || "";
+      const { locationIntent, cleanText: textWithoutLocation } = parseLocationFromText(rawText);
+      if (locationIntent) {
+        assistantMsg.locationIntent = locationIntent;
+        rawText = textWithoutLocation;
+        assistantMsg.text = textWithoutLocation;
+        assistantMsg.reply = textWithoutLocation;
+      }
+
+      // Parse and register any generated clinical report or table artifact
+      const { artifact, cleanText } = parseArtifactFromText(rawText);
+      if (artifact) {
+        addArtifact(artifact);
+        assistantMsg.artifact = artifact;
+        if (cleanText) {
+          assistantMsg.text = cleanText;
+          assistantMsg.reply = cleanText;
+        }
+        if (artifact.type === 'pdf') {
+          setTimeout(() => {
+            generatePDF(artifact.title, 'iris-artifact-content').catch(console.error);
+          }, 900);
+        }
+      }
+
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (error) {
       console.error("Error generating response:", error);
@@ -146,6 +179,26 @@ export default function ChatPage({
         currentSessionId,
         cachedLocation
       );
+
+      let rawText = assistantMsg.text || assistantMsg.reply || "";
+      const { locationIntent, cleanText: textWithoutLocation } = parseLocationFromText(rawText);
+      if (locationIntent) {
+        assistantMsg.locationIntent = locationIntent;
+        rawText = textWithoutLocation;
+        assistantMsg.text = textWithoutLocation;
+        assistantMsg.reply = textWithoutLocation;
+      }
+
+      const { artifact, cleanText } = parseArtifactFromText(rawText);
+      if (artifact) {
+        addArtifact(artifact);
+        assistantMsg.artifact = artifact;
+        if (cleanText) {
+          assistantMsg.text = cleanText;
+          assistantMsg.reply = cleanText;
+        }
+      }
+
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (error) {
       console.error("Error regenerating response:", error);
@@ -160,6 +213,25 @@ export default function ChatPage({
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-transparent overflow-hidden relative font-sans">
+      
+      {/* Pinned Collapse/Expand Toggle for Artifact Panel */}
+      {artifacts.length > 0 && (
+        <button
+          onClick={togglePanel}
+          className="fixed top-3 right-4 z-30 lg:absolute lg:top-3 lg:right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#162326]/90 hover:bg-[#1E3036] border border-[#2A3B3F] hover:border-[#9FE2EE]/50 text-[#9FE2EE] text-xs font-semibold shadow-lg backdrop-blur-md transition-all cursor-pointer group/toggle"
+          title={isPanelOpen ? "Hide Report Panel" : "View Generated Report"}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5 text-[#9FE2EE]" />
+          <span className="hidden sm:inline font-mono">
+            {isPanelOpen ? "Hide Report" : "View Report"}
+          </span>
+          {isPanelOpen ? (
+            <ChevronRight className="w-3.5 h-3.5 stroke-[2] transition-transform group-hover/toggle:translate-x-0.5" />
+          ) : (
+            <ChevronLeft className="w-3.5 h-3.5 stroke-[2] transition-transform group-hover/toggle:-translate-x-0.5" />
+          )}
+        </button>
+      )}
       
       {/* Top Header Bar */}
       <TopBar
